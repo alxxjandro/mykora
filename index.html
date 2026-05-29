@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MYKORA</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #14181f; font-family: sans-serif; }
+        canvas { display: block; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #fff; font-size: 14px; }
+        #info-card {
+            position: absolute; top: 20px; right: 20px; background: rgba(20,26,35,0.95); color: #fff;
+            padding: 15px; border-radius: 6px; width: 270px; display: none; pointer-events: none;
+            border: 1px solid #cfc9bd; font-size: 12px;
+        }
+        #info-card h4 { margin: 0 0 8px 0; border-bottom: 1px solid #cfc9bd; padding-bottom: 4px; color: #e8e4d8; }
+        .row { display: flex; margin-bottom: 5px; line-height: 1.35; }
+        .lbl { width: 88px; flex: 0 0 88px; color: #a8a290; font-weight: bold; }
+    </style>
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="loading">Cargando...</div>
+    <div id="info-card">
+        <h4 id="capa-nombre"></h4>
+        <div class="row"><div class="lbl">Mecanismo:</div><div id="capa-mecanismo"></div></div>
+        <div class="row"><div class="lbl">Función:</div><div id="capa-funcion"></div></div>
+        <div class="row"><div class="lbl">Proporción:</div><div id="capa-proporcion"></div></div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Carcasa translúcida en tono perla/gris (antes era azul).
+        const SHELL_COLOR = "#dcd7cc";
+
+        // Textura granular real de cada capa (carpeta ./textures), mapeada por la
+        // posición física de la cápsula: de arriba (capa 1) hacia abajo (capa 6).
+        const CAPSULE_TEXTURES = {
+            'Capsula_6': 'textures/1.png', // Capa 1 · Grava gruesa de sílice  (arriba)
+            'Capsula_2': 'textures/2.png', // Capa 2 · Arena de sílice
+            'Capsula_5': 'textures/3.png', // Capa 3 · Zeolita clinoptilolita
+            'Capsula_4': 'textures/4.png', // Capa 4 · Hierro de valencia cero (ZVI)
+            'Capsula_1': 'textures/5.png', // Capa 5 · Biochar + micelio de P. ostreatus
+            'Capsula_3': 'textures/6.png'  // Capa 6 · Grava fina de sílice   (abajo)
+        };
+
+        // Datos verídicos del prototipo terrestre de Mykora
+        // (Presentación "Mykora By Borregolitos": prototipo terrestre p.11,
+        //  arquitectura y función de capas p.24, modelo matemático p.26).
+        const CAPSULE_DB = {
+            'Capsula_6': { nombre: 'Capa 1 · Grava gruesa de sílice', mecanismo: 'Filtración física (pretratamiento)', funcion: 'Captura partículas sólidas grandes y mantiene el flujo del lecho.', proporcion: '15% del lecho' },
+            'Capsula_2': { nombre: 'Capa 2 · Arena de sílice', mecanismo: 'Filtración de lecho profundo (modelo de Iwasaki)', funcion: 'Retiene partículas finas; mezclada con el ZVI evita la colmatación.', proporcion: '20% del lecho' },
+            'Capsula_5': { nombre: 'Capa 3 · Zeolita clinoptilolita', mecanismo: 'Intercambio iónico (modelo de Bohart–Adams)', funcion: 'Intercambia iones en su estructura porosa para retener contaminantes.', proporcion: '15% del lecho' },
+            'Capsula_4': { nombre: 'Capa 4 · Hierro de valencia cero (ZVI)', mecanismo: 'Reducción química (cinética de pseudo-primer orden)', funcion: 'Reduce y precipita los contaminantes disueltos en el agua.', proporcion: '10% del lecho' },
+            'Capsula_1': { nombre: 'Capa 5 · Biochar + micelio de P. ostreatus', mecanismo: 'Adsorción + biorremediación (modelo de Langmuir, pseudo-segundo orden)', funcion: 'Adsorbe y biodegrada contaminantes mediante el micelio de P. ostreatus.', proporcion: '30% del lecho' },
+            'Capsula_3': { nombre: 'Capa 6 · Grava fina de sílice', mecanismo: 'Filtración / pulido final', funcion: 'Pulido final del agua y estabilización de la salida del sistema.', proporcion: '10% del lecho' }
+        };
+
+        const ASSETS = [
+            { id: 'filtroMarte', obj: 'models/filtroMarte.obj', mtl: 'models/filtroMarte.mtl' },
+            { id: 'Capsula_1', obj: 'models/capsula2.obj', mtl: 'models/capsula2.mtl' },
+            { id: 'Capsula_2', obj: 'models/capsula3.obj', mtl: 'models/capsula3.mtl' },
+            { id: 'Capsula_3', obj: 'models/capsula3a.obj', mtl: 'models/capsula3a.mtl' },
+            { id: 'Capsula_4', obj: 'models/capsula3a.obj', mtl: 'models/capsula3a.mtl' },
+            { id: 'Capsula_5', obj: 'models/capsula4.obj', mtl: 'models/capsula4.mtl' },
+            { id: 'Capsula_6', obj: 'models/capsulaXS.obj', mtl: 'models/capsulaXS.mtl' }
+        ];
+
+        const DOM = {
+            loading: document.getElementById('loading'),
+            card: document.getElementById('info-card'),
+            nombre: document.getElementById('capa-nombre'),
+            mecanismo: document.getElementById('capa-mecanismo'),
+            funcion: document.getElementById('capa-funcion'),
+            proporcion: document.getElementById('capa-proporcion')
+        };
+
+        const state = {
+            selectedId: null,
+            objects: {},
+            targets: {}
+        };
+
+        let scene, camera, renderer, controls;
+        const texLoader = new THREE.TextureLoader();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x14181f);
+
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 1000);
+            camera.position.set(0, 120, 450);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 200;
+            controls.maxDistance = 600;
+            controls.maxPolarAngle = Math.PI / 1.8;
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+            directional.position.set(200, 300, 150);
+            scene.add(ambient, directional);
+
+            const promises = ASSETS.map(item => {
+                return new Promise((resolve) => {
+                    new MTLLoader().load(item.mtl, (materials) => {
+                        materials.preload();
+                        new OBJLoader().setMaterials(materials).load(item.obj, (obj) => {
+                            obj.name = item.id;
+                            state.targets[item.id] = 0;
+                            
+                            const isShell = item.id === 'filtroMarte';
+                            obj.traverse((child) => {
+                                if (child.isMesh) {
+                                    // los .obj no traen normales: las calculamos para la luz
+                                    child.geometry.computeVertexNormals();
+                                    // tanto la carcasa exterior como cada cápsula son contenedores
+                                    // translúcidos perla; el material real va en un cilindro interno.
+                                    child.material = new THREE.MeshStandardMaterial({
+                                        color: SHELL_COLOR,
+                                        transparent: true,
+                                        opacity: isShell ? 0.22 : 0.30,
+                                        depthWrite: false,
+                                        roughness: 0.5,
+                                        metalness: 0.05,
+                                        side: THREE.DoubleSide
+                                    });
+                                }
+                            });
+                            resolve({ id: item.id, obj });
+                        });
+                    });
+                });
+            });
+
+            Promise.all(promises).then((results) => {
+                DOM.loading.style.display = 'none';
+                
+                results.forEach(res => {
+                    state.objects[res.id] = res.obj;
+                    scene.add(res.obj);
+                });
+
+                state.objects['filtroMarte'].position.set(0.0, 71.0, 6.4);
+                state.objects['Capsula_1'].position.set(0.0, -34.2, 0.0);
+                state.objects['Capsula_2'].position.set(0.0, 31.6, 0.0);
+                state.objects['Capsula_3'].position.set(0.0, -48.4, 0.0);
+                state.objects['Capsula_4'].position.set(0.0, -7.4, 0.0);
+                state.objects['Capsula_5'].position.set(0.0, 7.6, 0.0);
+                state.objects['Capsula_6'].position.set(0.0, 51.6, 0.0);
+
+                ASSETS.forEach(p => {
+                    if (p.id !== 'filtroMarte') state.objects[p.id].rotation.set(-1.571, 0, 0);
+                });
+
+                // Cilindro de material dentro de cada cápsula: ese es el que lleva la
+                // textura granular real. La cápsula queda como contenedor translúcido.
+                state.cylinders = {};
+                state.cylBaseZ = {};
+                scene.updateMatrixWorld(true);
+                ASSETS.forEach(p => {
+                    if (p.id === 'filtroMarte') return;
+                    const obj = state.objects[p.id];
+                    const box = new THREE.Box3().setFromObject(obj);
+                    const size = new THREE.Vector3(); box.getSize(size);
+                    const center = new THREE.Vector3(); box.getCenter(center);
+
+                    const tex = texLoader.load(CAPSULE_TEXTURES[p.id]);
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+                    tex.repeat.set(2.5, 1.5);
+                    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+                    const cyl = new THREE.Mesh(
+                        new THREE.CylinderGeometry(1, 1, 1, 48),
+                        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0.0 })
+                    );
+                    // ajustamos el cilindro (eje Y vertical) al hueco de la cápsula:
+                    // radio según el footprint X/Z y altura según el grosor Y.
+                    cyl.scale.set((size.x / 2) * 0.88, size.y * 0.82, (size.z / 2) * 0.88);
+                    cyl.position.copy(center);
+                    cyl.name = p.id; // permite seleccionar la cápsula al hacer click en el material
+                    scene.add(cyl);
+                    state.cylinders[p.id] = cyl;
+                    state.cylBaseZ[p.id] = center.z;
+                });
+
+                controls.target.set(0, 0, 0);
+                
+                window.addEventListener('click', onClick);
+                window.addEventListener('resize', onResize);
+                tick();
+            });
+        }
+
+        function onClick(e) {
+            if (e.clientY < 50) return;
+            
+            const mouse = new THREE.Vector2(
+                (e.clientX / window.innerWidth) * 2 - 1,
+                -(e.clientY / window.innerHeight) * 2 + 1
+            );
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const capsules = Object.values(state.objects).filter(o => o.name !== 'filtroMarte');
+            const selectable = capsules.concat(Object.values(state.cylinders || {}));
+            const hits = raycaster.intersectObjects(selectable, true);
+            
+            if (hits.length > 0) {
+                let root = hits[0].object;
+                while (root.parent && !state.objects[root.name]) root = root.parent;
+                
+                const id = root.name;
+                
+                if (state.selectedId === id) {
+                    state.targets[id] = 0;
+                    state.selectedId = null;
+                    DOM.card.style.display = 'none';
+                } else {
+                    if (state.selectedId) state.targets[state.selectedId] = 0;
+                    state.selectedId = id;
+                    state.targets[id] = 130.0;
+                    
+                    const data = CAPSULE_DB[id];
+                    DOM.nombre.innerText = data.nombre;
+                    DOM.mecanismo.innerText = data.mecanismo;
+                    DOM.funcion.innerText = data.funcion;
+                    DOM.proporcion.innerText = data.proporcion;
+                    DOM.card.style.display = 'block';
+                }
+            }
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function tick() {
+            requestAnimationFrame(tick);
+            
+            Object.keys(state.targets).forEach(id => {
+                if (state.objects[id] && id !== 'filtroMarte') {
+                    state.objects[id].position.z = THREE.MathUtils.lerp(state.objects[id].position.z, state.targets[id], 0.1);
+                    // el cilindro de material acompaña a su cápsula
+                    if (state.cylinders[id]) {
+                        state.cylinders[id].position.z = state.cylBaseZ[id] + state.objects[id].position.z;
+                    }
+                }
+            });
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Editores / IDE
+.claude/
+.vscode/
+
+# Dependencias (no se usan, pero por si acaso)
+node_modules/
+
+# Netlify
+.netlify/

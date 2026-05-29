@@ -1,0 +1,15 @@
+# Configuración de despliegue en Netlify — sitio estático, sin build.
+[build]
+  publish = "."
+  command = ""
+
+# Cache largo para los modelos 3D y texturas (no cambian a menudo)
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/textures/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
