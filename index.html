@@ -204,16 +204,34 @@
                 });
 
                 controls.target.set(0, 0, 0);
-                
-                window.addEventListener('click', onClick);
+
+                // Detección de "tap" con Pointer Events: funciona igual en escritorio
+                // y en móvil. El evento "click" sintético no es fiable en muchos
+                // navegadores móviles porque OrbitControls captura el touch y llama
+                // a preventDefault, cancelando el click.
+                const TAP_MOVE_THRESHOLD = 10; // px de tolerancia para considerar tap (no arrastre)
+                let pointerDown = null;
+
+                renderer.domElement.addEventListener('pointerdown', (e) => {
+                    pointerDown = { x: e.clientX, y: e.clientY };
+                });
+                renderer.domElement.addEventListener('pointerup', (e) => {
+                    if (!pointerDown) return;
+                    const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
+                    pointerDown = null;
+                    if (moved <= TAP_MOVE_THRESHOLD) onTap(e);
+                });
+                // si el gesto se cancela (p. ej. multitouch), no lo tratamos como tap
+                renderer.domElement.addEventListener('pointercancel', () => { pointerDown = null; });
+
                 window.addEventListener('resize', onResize);
                 tick();
             });
         }
 
-        function onClick(e) {
+        function onTap(e) {
             if (e.clientY < 50) return;
-            
+
             const mouse = new THREE.Vector2(
                 (e.clientX / window.innerWidth) * 2 - 1,
                 -(e.clientY / window.innerHeight) * 2 + 1
