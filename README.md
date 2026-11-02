@@ -2,7 +2,9 @@
 
 Prototipo interactivo del filtro **Mykora** (Borregolitos · Mars Challenge 2026).
 Muestra el modelo 3D del filtro multicapa; al hacer click en cada cápsula, esta
-se desliza hacia afuera y se muestra la información de la capa.
+se desliza hacia afuera y se muestra la información de la capa. El agua se
+simula con un modelo hidráulico: el caudal, el balance de masa y el tiempo en cada
+capa se calculan y se muestran en pantalla.
 
 Es un sitio **100% estático** (HTML + Three.js por CDN). No requiere build.
 
@@ -11,6 +13,7 @@ Es un sitio **100% estático** (HTML + Three.js por CDN). No requiere build.
 ```
 .
 ├── index.html        # App completa (escena Three.js + lógica + datos)
+├── physics.js        # Modelo hidráulico del filtro (Darcy, Kozeny–Carman, balance de masa)
 ├── models/           # Modelos 3D (.obj / .mtl)
 ├── textures/         # Texturas de cada material (1.png … 6.png)
 ├── netlify.toml      # Configuración de despliegue
@@ -56,3 +59,6 @@ netlify deploy --prod    # producción
 - Los `.obj` no traían UVs ni normales: las normales se calculan en runtime y la
   textura de cada material se aplica sobre un cilindro interno generado por código.
 - Las coordenadas y rotaciones de las cápsulas están fijas a propósito; no cambiar.
+- Porosidad, grano y retención de cada capa (`MATERIALS` en `physics.js`) son valores
+  típicos estimados, y la escala asume 1 unidad = 1 mm; conviene sustituirlos por los
+  medidos en el prototipo.

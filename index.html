@@ -2,20 +2,156 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MYKORA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1E2A2C">
+    <title>Mykora: filtro de agua</title>
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Piazzolla:wght@400;600&display=swap">
     <style>
-        body { margin: 0; overflow: hidden; background: #14181f; font-family: sans-serif; }
-        canvas { display: block; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #fff; font-size: 14px; }
-        #info-card {
-            position: absolute; top: 20px; right: 20px; background: rgba(20,26,35,0.95); color: #fff;
-            padding: 15px; border-radius: 6px; width: 270px; display: none; pointer-events: none;
-            border: 1px solid #cfc9bd; font-size: 12px;
+        :root {
+            --pizarra: #1E2A2C;
+            --micelio: #F2EEE6;
+            --ostra: #D8D5CF;
+            --tinta: #24140F;
+            --sec: #5A4A40;
+            --turbia: #6A4A16;
+            --agua: #17566A;
+            --safe-t: env(safe-area-inset-top, 0px);
+            --safe-r: env(safe-area-inset-right, 0px);
+            --safe-b: env(safe-area-inset-bottom, 0px);
+            --safe-l: env(safe-area-inset-left, 0px);
         }
-        #info-card h4 { margin: 0 0 8px 0; border-bottom: 1px solid #cfc9bd; padding-bottom: 4px; color: #e8e4d8; }
-        .row { display: flex; margin-bottom: 5px; line-height: 1.35; }
-        .lbl { width: 88px; flex: 0 0 88px; color: #a8a290; font-weight: bold; }
+        html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
+        body {
+            background: var(--pizarra); color: var(--micelio);
+            font: 400 14px/1.4 Piazzolla, Georgia, serif;
+            font-variant-numeric: tabular-nums lining-nums;
+            -webkit-text-size-adjust: 100%;
+        }
+        h1, h2, p, dl, dd { margin: 0; }
+        button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        [hidden] { display: none !important; }
+
+        #stage { position: fixed; inset: 0; height: 100dvh; }
+        canvas { display: block; opacity: 0; transition: opacity 0.4s; }
+        .ready canvas { opacity: 1; }
+
+        #top {
+            position: fixed; z-index: 1; pointer-events: none; max-width: 96px;
+            top: calc(16px + var(--safe-t)); left: calc(16px + var(--safe-l));
+            transition: opacity 0.2s;
+        }
+        #top h1 { font-size: 18px; font-weight: 600; line-height: 1.2; margin-bottom: 2px; }
+
+        #rail {
+            position: fixed; z-index: 1; display: flex; flex-direction: column; visibility: hidden;
+            top: calc(max(72px, 50dvh - 264px) + var(--safe-t)); right: calc(12px + var(--safe-r));
+        }
+        #rail::before {
+            content: "Tiempo del agua en cada capa"; position: absolute; bottom: 100%; right: 0; width: 92px;
+            margin-bottom: 6px; font-size: 12px; line-height: 1.2; text-align: right;
+        }
+        .ready #rail, .ready #sheet { visibility: visible; }
+        .layer { display: flex; align-items: stretch; justify-content: flex-end; gap: 6px; width: 92px; height: 48px; text-align: right; }
+        .layer:focus-visible { outline: 2px solid var(--micelio); outline-offset: 2px; }
+        .layer-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        .layer-meta { flex: 0 0 42px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+        .layer-bar { height: 3px; border-radius: 2px; overflow: hidden; }
+        .layer-bar > span { display: block; height: 100%; width: 0; margin-left: auto; background: var(--micelio); transition: width 0.2s linear; }
+        .swatch { position: relative; flex: 0 0 44px; display: grid; place-items: center; border-radius: 2px; overflow: hidden; font-weight: 600; }
+        .swatch-tex {
+            position: absolute; inset: 0; background-size: cover;
+            filter: saturate(0.2) brightness(0.6); transition: filter 0.4s;
+        }
+        .layer.is-wet .swatch-tex { filter: none; }
+        .swatch-num { position: relative; text-shadow: 0 0 3px rgba(36, 20, 15, 0.9); }
+        .layer[aria-pressed="true"] .swatch-tex { visibility: hidden; }
+        .layer[aria-pressed="true"] .swatch { box-shadow: inset 0 0 0 1px var(--micelio); }
+
+        #sheet {
+            position: fixed; z-index: 2; left: 0; right: 0; bottom: 0; box-sizing: border-box; visibility: hidden;
+            display: flex; flex-direction: column; gap: 8px; max-height: 46dvh; min-height: calc(120px + var(--safe-b));
+            padding: 12px calc(16px + var(--safe-r)) calc(12px + var(--safe-b)) calc(16px + var(--safe-l));
+            background: var(--ostra); color: var(--tinta); border-radius: 14px 14px 0 0;
+        }
+        #sheet :focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; }
+        #hint { color: var(--sec); }
+        #detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+        #capa-orden { color: var(--sec); }
+        #capa-nombre { font-size: 18px; font-weight: 600; line-height: 1.25; margin-bottom: 8px; }
+        #detail dt { color: var(--sec); }
+        #detail dd { margin-bottom: 8px; }
+        #capa-residencia { margin-bottom: 8px; }
+        .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        #return-layer, #reload { min-height: 44px; padding: 0 16px; border-radius: 8px; font-weight: 600; }
+        #return-layer { background: var(--tinta); color: var(--ostra); margin-bottom: 8px; }
+        #sheet #return-layer:focus-visible { outline-offset: 3px; }
+        .note { font-size: 12px; color: var(--sec); }
+        #note-side { display: none; }
+        #flow { flex: none; display: flex; flex-direction: column; gap: 6px; }
+        .flow-q { display: flex; justify-content: space-between; gap: 24px; }
+        .flow-q > :last-child, .flow-item:last-child { text-align: right; }
+        .flow-lbl { display: block; font-size: 12px; color: var(--sec); }
+        .flow-value { display: block; font-size: 24px; font-weight: 600; line-height: 1.15; }
+        #q-in { color: var(--turbia); }
+        #q-out { color: var(--agua); }
+        .flow-balance { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+        .flow-item { white-space: nowrap; }
+        .flow-op { color: var(--sec); }
+        .has-detail .flow-balance, .has-detail #hint { display: none; }
+        .has-detail #flow { border-top: 1px solid rgba(36, 20, 15, 0.18); padding-top: 8px; }
+
+        #status {
+            position: fixed; z-index: 3; inset: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 16px; padding: 24px; text-align: center;
+        }
+        .ready #status { display: none; }
+        #reload { background: var(--ostra); color: var(--tinta); }
+        #reload:focus-visible { outline: 2px solid var(--micelio); outline-offset: 2px; }
+
+        /* vertical: al abrir una capa el encabezado cede su sitio */
+        @media not all and (min-width: 900px) {
+            .has-detail #top { opacity: 0; }
+        }
+        @media (max-height: 700px) and (max-width: 899px) and (orientation: portrait) {
+            .layer { height: 44px; }
+            #sheet { max-height: min(46dvh, calc(100dvh - 344px - var(--safe-t))); }
+        }
+
+        /* lateral: escritorio y teléfono apaisado */
+        @media (min-width: 900px), (orientation: landscape) and (max-height: 700px) {
+            #top { max-width: 300px; }
+            #rail { top: 50%; transform: translateY(-50%); }
+            #sheet {
+                right: auto; width: 340px; max-height: 70dvh; min-height: 0;
+                padding-right: 16px; border-radius: 0 14px 0 0;
+            }
+            .has-detail #top { opacity: 1; }
+            .note-detail { display: none; }
+            #note-side { display: block; }
+        }
+        @media (min-width: 900px) {
+            #top h1 { font-size: 32px; }
+            #rail { right: max(calc(12px + var(--safe-r)), calc(50vw - 430px)); }
+            .layer { width: 220px; }
+            .layer-name {
+                position: static; width: auto; height: auto; clip-path: none; flex: 1; min-width: 0;
+                align-self: center; line-height: 1.15; white-space: normal;
+            }
+        }
+        @media (orientation: landscape) and (max-height: 700px) and (max-width: 899px) {
+            .layer { height: 44px; }
+            #sheet { width: calc(300px + var(--safe-l)); max-height: calc(100dvh - 72px); }
+        }
+        @media (max-height: 320px) {
+            #rail { top: 0; transform: none; max-height: 100dvh; overflow-y: auto; }
+            #rail::before { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition: none !important; }
+        }
     </style>
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
     <script type="importmap">
@@ -28,19 +164,73 @@
     </script>
 </head>
 <body>
-    <div id="loading">Cargando...</div>
-    <div id="info-card">
-        <h4 id="capa-nombre"></h4>
-        <div class="row"><div class="lbl">Mecanismo:</div><div id="capa-mecanismo"></div></div>
-        <div class="row"><div class="lbl">Función:</div><div id="capa-funcion"></div></div>
-        <div class="row"><div class="lbl">Proporción:</div><div id="capa-proporcion"></div></div>
+    <div id="stage"></div>
+    <header id="top">
+        <h1>Mykora</h1>
+        <p>Filtro de agua por capas</p>
+    </header>
+    <nav id="rail" aria-label="Capas"></nav>
+    <p id="live" class="sr-only" aria-live="polite"></p>
+    <section id="sheet">
+        <p id="hint"><span id="hint-tap">Toca una capa para sacarla.</span> <span id="hint-drag">Arrastra para girar.</span></p>
+        <div id="detail" hidden>
+            <p id="capa-orden"></p>
+            <h2 id="capa-nombre"></h2>
+            <p id="capa-residencia"></p>
+            <button id="return-layer" type="button">Devolver al filtro</button>
+            <dl>
+                <dt>Cómo actúa</dt><dd id="capa-mecanismo"></dd>
+                <dt>Para qué sirve</dt><dd id="capa-funcion"></dd>
+                <dt>Cuánto ocupa</dt><dd id="capa-proporcion"></dd>
+            </dl>
+            <p class="note note-detail">Simulación con las ecuaciones de Darcy y Kozeny–Carman. La porosidad, el grano y la escala son estimados.</p>
+        </div>
+        <div id="flow">
+            <div class="flow-q">
+                <div><span class="flow-lbl">Entra</span><span id="q-in" class="flow-value"></span></div>
+                <div><span class="flow-lbl">Sale</span><span id="q-out" class="flow-value"></span></div>
+            </div>
+            <div class="flow-balance" role="group" aria-label="Balance de masa">
+                <div class="flow-item"><span id="v-in"></span><span class="flow-lbl">entró</span></div>
+                <div class="flow-op">=</div>
+                <div class="flow-item"><span id="v-held"></span><span class="flow-lbl">en el filtro</span></div>
+                <div class="flow-op">+</div>
+                <div class="flow-item"><span id="v-out"></span><span class="flow-lbl">salió</span></div>
+            </div>
+        </div>
+        <p id="note-side" class="note">Simulación con las ecuaciones de Darcy y Kozeny–Carman. La porosidad, el grano y la escala son estimados.</p>
+    </section>
+    <div id="status">
+        <p id="status-text">Cargando el filtro…</p>
+        <button id="reload" type="button" hidden>Recargar</button>
     </div>
+
+    <!-- Script clásico: si el CDN falla, el módulo nunca corre y nadie más avisaría. -->
+    <script>
+        window.mykoraFail = function (error) {
+            if (error) console.error(error);
+            window.mykoraFailed = true;
+            document.getElementById('status-text').setAttribute('role', 'alert');
+            document.getElementById('status-text').textContent = 'No se pudo cargar el filtro. Revisa tu conexión.';
+            document.getElementById('reload').hidden = false;
+        };
+        document.getElementById('reload').addEventListener('click', function () { location.reload(); });
+        setTimeout(function () { if (!window.mykoraStarted) window.mykoraFail(); }, 15000);
+    </script>
 
     <script type="module">
         import * as THREE from 'three';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
         import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+        import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+        import { FilterModel } from './physics.js';
+
+        window.mykoraStarted = true;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const lateralLayout = window.matchMedia('(min-width: 900px), (orientation: landscape) and (max-height: 700px)');
+        const wideLayout = window.matchMedia('(min-width: 900px)');
 
         // Carcasa translúcida en tono perla/gris (antes era azul).
         const SHELL_COLOR = "#dcd7cc";
@@ -78,82 +268,252 @@
             { id: 'Capsula_6', obj: 'models/capsulaXS.obj', mtl: 'models/capsulaXS.mtl' }
         ];
 
+        // Agua: geometría medida de los .obj (1 unidad = 1 mm). El eje de los cuellos
+        // de entrada y salida está en z = 6.4. El tubo de alimentación queda a la misma
+        // distancia de caída que la salida para poder comparar los dos chorros.
+        const WATER = {
+            axisZ: 6.4,
+            nozzleY: 150,
+            nozzleRadius: 8,
+            bedTop: 69.6,
+            bedBottom: -50.4,
+            streamBottom: -320,
+            pondRadius: 14.6,
+            maxPondHeight: 10,
+            maxInflow: 15000,
+            gravity: 9810,
+            nozzleSpeed: 100,
+            gapSpeed: 400
+        };
+
+        // 6 capas + 5 huecos entre ellas
+        const SEGMENT_COUNT = 11;
+
+        // GLSL común: perfil del lecho (poros acumulados, altura y turbidez por segmento).
+        const WATER_GLSL_COMMON = `
+            uniform float uSegPore[${SEGMENT_COUNT + 1}];
+            uniform float uSegY[${SEGMENT_COUNT + 1}];
+            uniform float uSegC[${SEGMENT_COUNT + 1}];
+            vec3 waterTint(float c) {
+                return mix(vec3(0.80, 0.93, 1.0), vec3(0.42, 0.30, 0.16), c);
+            }
+            float turbidityAt(float y) {
+                if (y >= uSegY[0]) return 1.0;
+                for (int i = 0; i < ${SEGMENT_COUNT}; i++) {
+                    if (y >= uSegY[i + 1]) {
+                        return mix(uSegC[i], uSegC[i + 1], (uSegY[i] - y) / max(uSegY[i] - uSegY[i + 1], 0.001));
+                    }
+                }
+                return uSegC[${SEGMENT_COUNT}];
+            }
+        `;
+
+        const WATER_GLSL_NOISE = `
+            float wHash(vec3 p) {
+                p = fract(p * 0.3183099 + 0.1);
+                p *= 17.0;
+                return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+            }
+            float wNoise(vec3 x) {
+                vec3 i = floor(x);
+                vec3 f = fract(x);
+                f = f * f * (3.0 - 2.0 * f);
+                return mix(
+                    mix(mix(wHash(i), wHash(i + vec3(1, 0, 0)), f.x), mix(wHash(i + vec3(0, 1, 0)), wHash(i + vec3(1, 1, 0)), f.x), f.y),
+                    mix(mix(wHash(i + vec3(0, 0, 1)), wHash(i + vec3(1, 0, 1)), f.x), mix(wHash(i + vec3(0, 1, 1)), wHash(i + vec3(1, 1, 1)), f.x), f.y),
+                    f.z
+                );
+            }
+        `;
+
+        // Parcelas de agua en los poros: la posición sale del volumen de poros recorrido,
+        // así van más lentas en las capas con más poros por unidad de altura.
+        const TRACER_VERTEX = `
+            attribute vec3 aSeed;
+            uniform float uThroughput;
+            uniform float uSegZ[${SEGMENT_COUNT}];
+            uniform float uSegRadius[${SEGMENT_COUNT}];
+            uniform float uPointScale;
+            ${WATER_GLSL_COMMON}
+            varying float vY;
+            varying float vInLayer;
+            void main() {
+                float pore = fract(aSeed.x + uThroughput) * uSegPore[${SEGMENT_COUNT}];
+                vY = uSegY[${SEGMENT_COUNT}];
+                float centerZ = 0.0;
+                float radius = 0.0;
+                vInLayer = 0.0;
+                for (int i = 0; i < ${SEGMENT_COUNT}; i++) {
+                    if (pore <= uSegPore[i + 1]) {
+                        vY = mix(uSegY[i], uSegY[i + 1], (pore - uSegPore[i]) / max(uSegPore[i + 1] - uSegPore[i], 0.001));
+                        centerZ = uSegZ[i];
+                        radius = uSegRadius[i];
+                        // los índices pares son capas; los impares, huecos
+                        vInLayer = 1.0 - mod(float(i), 2.0);
+                        break;
+                    }
+                }
+                float angle = aSeed.z * 6.2832;
+                vec4 mv = modelViewMatrix * vec4(cos(angle) * radius, vY, centerZ + sin(angle) * radius, 1.0);
+                gl_PointSize = uPointScale * (0.7 + 0.8 * aSeed.y) * 800.0 / -mv.z;
+                gl_Position = projectionMatrix * mv;
+            }
+        `;
+
+        const TRACER_FRAGMENT = `
+            uniform float uFront;
+            varying float vY;
+            varying float vInLayer;
+            void main() {
+                if (vY < uFront || vInLayer < 0.5) discard;
+                float d = length(gl_PointCoord - 0.5) * 2.0;
+                gl_FragColor = vec4(0.85, 0.93, 1.0, (1.0 - smoothstep(0.2, 1.0, d)) * 0.75);
+            }
+        `;
+
+        // Gotas sueltas: salpicadura al caer en el cuello y rotura del chorro de salida.
+        const DROP_VERTEX = `
+            attribute vec3 aSeed;
+            uniform float uTime;
+            uniform float uRate;
+            uniform float uY;
+            uniform float uUp;
+            uniform float uDrop;
+            uniform float uSpread;
+            uniform float uCenterZ;
+            uniform float uSize;
+            uniform float uPointScale;
+            void main() {
+                float phase = fract(aSeed.x + uTime * uRate * (0.7 + 0.6 * aSeed.y));
+                float y = uY + uUp * 4.0 * phase * (1.0 - phase) * aSeed.y - uDrop * phase * phase;
+                float angle = aSeed.z * 6.2832;
+                float r = uSpread * phase * (0.3 + 0.7 * aSeed.y);
+                vec4 mv = modelViewMatrix * vec4(cos(angle) * r, y, uCenterZ + sin(angle) * r, 1.0);
+                gl_PointSize = uPointScale * uSize * (0.6 + 0.8 * aSeed.y) * 340.0 / -mv.z;
+                gl_Position = projectionMatrix * mv;
+            }
+        `;
+
+        const DROP_FRAGMENT = `
+            uniform float uAmount;
+            uniform vec3 uColor;
+            void main() {
+                float d = length(gl_PointCoord - 0.5) * 2.0;
+                float alpha = (1.0 - smoothstep(0.3, 1.0, d)) * uAmount;
+                if (alpha < 0.01) discard;
+                gl_FragColor = vec4(uColor, alpha);
+            }
+        `;
+
         const DOM = {
-            loading: document.getElementById('loading'),
-            card: document.getElementById('info-card'),
+            stage: document.getElementById('stage'),
+            rail: document.getElementById('rail'),
+            sheet: document.getElementById('sheet'),
+            hint: document.getElementById('hint'),
+            hintTap: document.getElementById('hint-tap'),
+            hintDrag: document.getElementById('hint-drag'),
+            detail: document.getElementById('detail'),
+            live: document.getElementById('live'),
+            orden: document.getElementById('capa-orden'),
             nombre: document.getElementById('capa-nombre'),
             mecanismo: document.getElementById('capa-mecanismo'),
             funcion: document.getElementById('capa-funcion'),
-            proporcion: document.getElementById('capa-proporcion')
+            proporcion: document.getElementById('capa-proporcion'),
+            residencia: document.getElementById('capa-residencia'),
+            returnLayer: document.getElementById('return-layer'),
+            statusText: document.getElementById('status-text'),
+            qIn: document.getElementById('q-in'),
+            qOut: document.getElementById('q-out'),
+            vIn: document.getElementById('v-in'),
+            vHeld: document.getElementById('v-held'),
+            vOut: document.getElementById('v-out')
         };
 
         const state = {
             selectedId: null,
             objects: {},
-            targets: {}
+            targets: {},
+            // márgenes de interfaz: el encuadre centra el filtro en el espacio que dejan libre
+            view: { uiB: 0, uiL: 0, uiR: 0, targetB: 0, targetL: 0, targetR: 0 }
+        };
+
+        // Encuadre: de la boquilla al chorro de salida, y el ancho del filtro con holgura
+        const FRAME = {
+            fov: 28, elevation: 8, halfWidth: 33, margin: 1.06,
+            portrait: { halfHeight: 152.5, targetY: 12.5 },
+            // en lateral sobra ancho y falta alto: se acerca sin perder la boquilla
+            lateral: { halfHeight: 120, targetY: 32 }
         };
 
         let scene, camera, renderer, controls;
-        const texLoader = new THREE.TextureLoader();
+        const SCENE_COLOR = 0x1E2A2C;
+        const LAYER_COUNT = Object.keys(CAPSULE_DB).length;
+        const frameClock = new THREE.Clock();
+        const frameStats = { sum: 0, count: 0 };
+        const manager = new THREE.LoadingManager();
+        const texLoader = new THREE.TextureLoader(manager);
+
+        // archivos previstos: .mtl y .obj por pieza más las seis texturas
+        const EXPECTED_FILES = ASSETS.length * 2 + Object.keys(CAPSULE_TEXTURES).length;
+        manager.onProgress = (url, loaded) => {
+            if (window.mykoraFailed) return;
+            DOM.statusText.textContent = `Cargando el filtro… ${Math.min(100, Math.round(loaded / EXPECTED_FILES * 100))}%`;
+        };
+        manager.onError = window.mykoraFail;
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x14181f);
+            scene.background = new THREE.Color(SCENE_COLOR);
 
-            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 1000);
-            camera.position.set(0, 120, 450);
+            camera = new THREE.PerspectiveCamera(FRAME.fov, 1, 1, 2500);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            DOM.stage.appendChild(renderer.domElement);
 
             controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
+            controls.enableDamping = !reducedMotion;
             controls.dampingFactor = 0.05;
-            controls.minDistance = 200;
-            controls.maxDistance = 600;
             controls.maxPolarAngle = Math.PI / 1.8;
+            controls.target.set(0, FRAME.portrait.targetY, WATER.axisZ);
+            const elevation = THREE.MathUtils.degToRad(FRAME.elevation);
+            camera.position.set(0, Math.sin(elevation), Math.cos(elevation)).add(controls.target);
 
-            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-            const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            const directional = new THREE.DirectionalLight(0xffffff, 2.6);
             directional.position.set(200, 300, 150);
-            scene.add(ambient, directional);
+            const backLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            backLight.position.set(-150, 100, -200);
+            scene.add(ambient, directional, backLight);
 
             const promises = ASSETS.map(item => {
                 return new Promise((resolve) => {
-                    new MTLLoader().load(item.mtl, (materials) => {
+                    new MTLLoader(manager).load(item.mtl, (materials) => {
                         materials.preload();
-                        new OBJLoader().setMaterials(materials).load(item.obj, (obj) => {
+                        new OBJLoader(manager).setMaterials(materials).load(item.obj, (obj) => {
                             obj.name = item.id;
                             state.targets[item.id] = 0;
                             
                             const isShell = item.id === 'filtroMarte';
                             obj.traverse((child) => {
                                 if (child.isMesh) {
-                                    // los .obj no traen normales: las calculamos para la luz
-                                    child.geometry.computeVertexNormals();
+                                    // los .obj no traen normales: se calculan para la luz, conservando
+                                    // las aristas; la posición de los vértices no cambia
+                                    child.geometry = toCreasedNormals(child.geometry, THREE.MathUtils.degToRad(35));
                                     // tanto la carcasa exterior como cada cápsula son contenedores
-                                    // translúcidos perla; el material real va en un cilindro interno.
-                                    child.material = new THREE.MeshStandardMaterial({
-                                        color: SHELL_COLOR,
-                                        transparent: true,
-                                        opacity: isShell ? 0.22 : 0.30,
-                                        depthWrite: false,
-                                        roughness: 0.5,
-                                        metalness: 0.05,
-                                        side: THREE.DoubleSide
-                                    });
+                                    // translúcidos; el material real va en un cilindro interno.
+                                    child.material = shellMaterial(isShell ? 0.05 : 0.08, isShell ? 0.55 : 0.45);
                                 }
                             });
-                            resolve({ id: item.id, obj });
-                        });
-                    });
+                                                        resolve({ id: item.id, obj });
+                        }, undefined, window.mykoraFail);
+                    }, undefined, window.mykoraFail);
                 });
             });
 
             Promise.all(promises).then((results) => {
-                DOM.loading.style.display = 'none';
-                
                 results.forEach(res => {
                     state.objects[res.id] = res.obj;
                     scene.add(res.obj);
@@ -175,6 +535,7 @@
                 // textura granular real. La cápsula queda como contenedor translúcido.
                 state.cylinders = {};
                 state.cylBaseZ = {};
+                const textures = [];
                 scene.updateMatrixWorld(true);
                 ASSETS.forEach(p => {
                     if (p.id === 'filtroMarte') return;
@@ -183,15 +544,20 @@
                     const size = new THREE.Vector3(); box.getSize(size);
                     const center = new THREE.Vector3(); box.getCenter(center);
 
-                    const tex = texLoader.load(CAPSULE_TEXTURES[p.id]);
+                    let tex;
+                    textures.push(new Promise((resolve) => {
+                        tex = texLoader.load(CAPSULE_TEXTURES[p.id], resolve, undefined, window.mykoraFail);
+                    }));
                     tex.colorSpace = THREE.SRGBColorSpace;
-                    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-                    tex.repeat.set(2.5, 1.5);
+                    // en espejo: el cilindro no muestra costura de frente
+                    tex.wrapS = tex.wrapT = THREE.MirroredRepeatWrapping;
+                    tex.repeat.set(2, 1);
+                    tex.offset.x = 0.5;
                     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
                     const cyl = new THREE.Mesh(
                         new THREE.CylinderGeometry(1, 1, 1, 48),
-                        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0.0 })
+                        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.5 })
                     );
                     // ajustamos el cilindro (eje Y vertical) al hueco de la cápsula:
                     // radio según el footprint X/Z y altura según el grosor Y.
@@ -203,7 +569,7 @@
                     state.cylBaseZ[p.id] = center.z;
                 });
 
-                controls.target.set(0, 0, 0);
+                createWater();
 
                 // Detección de "tap" con Pointer Events: funciona igual en escritorio
                 // y en móvil. El evento "click" sintético no es fiable en muchos
@@ -219,24 +585,474 @@
                     if (!pointerDown) return;
                     const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
                     pointerDown = null;
-                    if (moved <= TAP_MOVE_THRESHOLD) onTap(e);
+                    if (moved <= TAP_MOVE_THRESHOLD) {
+                        onTap(e);
+                    } else {
+                        DOM.hintDrag.hidden = true;
+                        updateHint();
+                    }
                 });
                 // si el gesto se cancela (p. ej. multitouch), no lo tratamos como tap
                 renderer.domElement.addEventListener('pointercancel', () => { pointerDown = null; });
 
-                window.addEventListener('resize', onResize);
-                tick();
+                DOM.returnLayer.addEventListener('click', () => returnSelected());
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') returnSelected();
+                });
+
+                new ResizeObserver(onResize).observe(DOM.stage);
+                new ResizeObserver(readLayout).observe(DOM.sheet);
+                onResize();
+                state.view.uiB = state.view.targetB;
+                state.view.uiL = state.view.targetL;
+                state.view.uiR = state.view.targetR;
+
+                // sin arrancar hasta tener texturas: así nunca se ven capas negras
+                return Promise.all(textures).then(tick);
+            }).catch(window.mykoraFail);
+        }
+
+        // Vidrio de carcasa y cápsulas: casi invisible de frente y visible en los bordes,
+        // en vez de un velo uniforme que lava lo que hay dentro.
+        function shellMaterial(alphaMin, alphaMax) {
+            const material = new THREE.MeshStandardMaterial({
+                color: SHELL_COLOR,
+                transparent: true,
+                depthWrite: false,
+                roughness: 0.18,
+                metalness: 0.05,
+                side: THREE.DoubleSide,
+                forceSinglePass: true
+            });
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.uAlphaMin = { value: alphaMin };
+                shader.uniforms.uAlphaMax = { value: alphaMax };
+                shader.fragmentShader = `
+                    uniform float uAlphaMin;
+                    uniform float uAlphaMax;
+                ` + shader.fragmentShader.replace('#include <opaque_fragment>', `
+                    diffuseColor.a = mix(uAlphaMin, uAlphaMax, pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5));
+                    #include <opaque_fragment>
+                `);
+            };
+            return material;
+        }
+
+        function createWater() {
+            const order = Object.keys(state.cylinders)
+                .sort((a, b) => state.cylinders[b].position.y - state.cylinders[a].position.y);
+
+            // El alto de cada capa sale de su proporción del lecho; los huecos, de las cápsulas reales.
+            const capsuleBoxes = order.map(id => new THREE.Box3().setFromObject(state.objects[id]));
+            const bedLength = capsuleBoxes.reduce((sum, b) => sum + (b.max.y - b.min.y), 0);
+            const segments = [];
+            const visualY = [];
+            order.forEach((id, i) => {
+                const cyl = state.cylinders[id];
+                visualY.push(cyl.position.y + cyl.scale.y / 2, cyl.position.y - cyl.scale.y / 2);
+                segments.push({ id, length: bedLength * parseFloat(CAPSULE_DB[id].proporcion) / 100 });
+                if (i < order.length - 1) {
+                    segments.push({ length: capsuleBoxes[i].min.y - capsuleBoxes[i + 1].max.y });
+                }
+            });
+
+            const cylinders = order.map(id => state.cylinders[id]);
+            const model = new FilterModel({
+                segments,
+                bedArea: cylinders.reduce((sum, c) => sum + Math.PI * c.scale.x * c.scale.z, 0) / cylinders.length,
+                pondArea: Math.PI * WATER.pondRadius ** 2,
+                maxPondHeight: WATER.maxPondHeight,
+                maxInflow: WATER.maxInflow
+            });
+
+            // Uniformes compartidos por todos los materiales de agua
+            const shared = {
+                uTime: { value: 0 },
+                uFront: { value: WATER.bedTop },
+                uThroughput: { value: 0 },
+                uSegPore: { value: new Array(SEGMENT_COUNT + 1).fill(0) },
+                uSegY: { value: visualY },
+                uSegC: { value: new Array(SEGMENT_COUNT + 1).fill(1) },
+                uSegZ: { value: new Array(SEGMENT_COUNT).fill(0) },
+                uPointScale: { value: 1 },
+                uSegRadius: { value: model.segments.map(seg => seg.id ? (state.cylinders[seg.id].scale.x + state.cylinders[seg.id].scale.z) / 2 * 1.01 : 0) }
+            };
+            state.water = {
+                model, shared, order,
+                clock: new THREE.Clock(),
+                elapsed: 0,
+                panelUpdated: -1,
+                outflowStart: null
+            };
+
+            const pmrem = new THREE.PMREMGenerator(renderer);
+            const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+            pmrem.dispose();
+            scene.environment = envMap;
+
+            // Agua real: transmite y refracta lo que tiene detrás (IOR 1.33) y refleja el
+            // entorno. La forma del chorro sale de la continuidad: A = Q / v, v² = v₀² + 2·g·caída.
+            const waterMaterial = (params) => {
+                const uniforms = {
+                    uQ: { value: 0 },
+                    uStreamTop: { value: params.top },
+                    uSpeed: { value: params.speed || 1 },
+                    uGravity: { value: params.gravity || 0 },
+                    uMaxRadius: { value: params.maxRadius || 0 },
+                    uIsStream: { value: params.isStream ? 1 : 0 },
+                    uMaskTop: { value: 1000 },
+                    uMaskBottom: { value: -1000 },
+                    uFlow: { value: params.flow },
+                    uRipple: { value: params.ripple }
+                };
+                const material = new THREE.MeshPhysicalMaterial({
+                    color: 0xffffff,
+                    roughness: 0.06,
+                    metalness: 0,
+                    transmission: 1,
+                    ior: 1.33,
+                    thickness: params.thickness,
+                    envMap,
+                    envMapIntensity: 1.3,
+                    depthWrite: false
+                });
+                material.userData.uniforms = uniforms;
+                material.onBeforeCompile = (shader) => {
+                    Object.assign(shader.uniforms, shared, uniforms);
+                    shader.vertexShader = `
+                        uniform float uTime;
+                        uniform float uQ;
+                        uniform float uStreamTop;
+                        uniform float uSpeed;
+                        uniform float uGravity;
+                        uniform float uMaxRadius;
+                        uniform float uIsStream;
+                        varying vec3 vWaterPos;
+                    ` + shader.vertexShader.replace('#include <begin_vertex>', `
+                        #include <begin_vertex>
+                        if (uIsStream > 0.5) {
+                            float fall = max(uStreamTop - position.y, 0.0);
+                            float speed = sqrt(uSpeed * uSpeed + 2.0 * uGravity * fall);
+                            float radius = min(sqrt(uQ / (3.14159 * speed)), uMaxRadius);
+                            // inestabilidad de Plateau–Rayleigh: crece con la caída
+                            float growth = min(fall / 170.0, 1.0);
+                            radius *= 1.0 + growth * 0.22 * sin(position.y * 0.32 + uTime * 34.0) + 0.04 * sin(position.y * 1.3 + uTime * 61.0);
+                            transformed.xz = normal.xz * radius;
+                        }
+                        vWaterPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                    `);
+                    shader.fragmentShader = `
+                        uniform float uTime;
+                        uniform float uFlow;
+                        uniform float uRipple;
+                        uniform float uMaskTop;
+                        uniform float uMaskBottom;
+                        varying vec3 vWaterPos;
+                        float waterC;
+                        ${WATER_GLSL_COMMON}
+                        ${WATER_GLSL_NOISE}
+                    ` + shader.fragmentShader
+                        .replace('#include <color_fragment>', `
+                            #include <color_fragment>
+                            if (vWaterPos.y > uMaskTop || vWaterPos.y < uMaskBottom) discard;
+                            waterC = turbidityAt(vWaterPos.y);
+                            diffuseColor.rgb = waterTint(waterC);
+                        `)
+                        .replace('#include <normal_fragment_maps>', `
+                            #include <normal_fragment_maps>
+                            vec3 rippleQ = vec3(vWaterPos.x * 0.7, (vWaterPos.y + uTime * uFlow) * 0.09, vWaterPos.z * 0.7);
+                            normal = normalize(normal + uRipple * (vec3(wNoise(rippleQ), wNoise(rippleQ + 7.0), wNoise(rippleQ + 13.0)) - 0.5));
+                        `)
+                        // borde brillante: el agua limpia sobre fondo oscuro se ve por sus reflejos
+                        .replace('#include <emissivemap_fragment>', `
+                            #include <emissivemap_fragment>
+                            totalEmissiveRadiance += waterTint(waterC) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.0) * mix(1.2, 0.55, waterC);
+                        `)
+                        // el agua con sólidos deja pasar menos luz y la dispersa
+                        .replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment
+                            .replace('material.transmission = transmission;', 'material.transmission = transmission * (1.0 - 0.70 * waterC);'));
+                };
+                return material;
+            };
+
+            const stream = (top, bottom, params) => {
+                const geometry = new THREE.CylinderGeometry(1, 1, top - bottom, 20, 240, true);
+                geometry.translate(0, (top + bottom) / 2, 0);
+                const mesh = new THREE.Mesh(geometry, waterMaterial({ top, isStream: true, ...params }));
+                mesh.frustumCulled = false; // el radio real se calcula en el shader
+                mesh.position.z = WATER.axisZ;
+                mesh.visible = false;
+                scene.add(mesh);
+                return mesh;
+            };
+
+            state.water.inlet = stream(WATER.nozzleY, WATER.bedTop, {
+                speed: WATER.nozzleSpeed, gravity: WATER.gravity, maxRadius: WATER.nozzleRadius - 0.5,
+                flow: 320, ripple: 0.35, thickness: 3
+            });
+            state.water.outlet = stream(WATER.bedBottom, WATER.streamBottom, {
+                speed: 4, gravity: WATER.gravity, maxRadius: WATER.pondRadius,
+                flow: 320, ripple: 0.35, thickness: 3
+            });
+            // Hilo que cruza los huecos entre capas: el material opaco de cada capa lo tapa;
+            // se ve entre capas y al caer por el hueco de una cápsula extraída.
+            state.water.column = stream(WATER.bedTop, WATER.bedBottom, {
+                speed: WATER.gapSpeed, maxRadius: 9, flow: 90, ripple: 0.3, thickness: 3
+            });
+
+            // Lámina de agua que la válvula mantiene sobre el lecho
+            const pondGeometry = new THREE.CylinderGeometry(WATER.pondRadius, WATER.pondRadius, 1, 48);
+            pondGeometry.translate(0, 0.5, 0);
+            state.water.pond = new THREE.Mesh(pondGeometry, waterMaterial({ top: 0, flow: 5, ripple: 0.18, thickness: 8 }));
+            state.water.pond.position.set(0, WATER.bedTop, WATER.axisZ);
+            state.water.pond.visible = false;
+            scene.add(state.water.pond);
+
+            // Tubo de alimentación
+            const pipe = new THREE.Mesh(
+                new THREE.CylinderGeometry(WATER.nozzleRadius, WATER.nozzleRadius, 400, 40, 1, true),
+                new THREE.MeshStandardMaterial({ color: 0x4a5052, roughness: 0.6, metalness: 0.2, side: THREE.DoubleSide })
+            );
+            pipe.position.set(0, WATER.nozzleY + 200, WATER.axisZ);
+            scene.add(pipe);
+
+            // El material de cada capa se oscurece y brilla donde ya está mojado.
+            const wetUniforms = { uFront: shared.uFront };
+            Object.values(state.cylinders).forEach(cyl => {
+                cyl.material.onBeforeCompile = (shader) => {
+                    Object.assign(shader.uniforms, wetUniforms);
+                    shader.vertexShader = 'varying vec3 vWetPos;\n' + shader.vertexShader.replace('#include <begin_vertex>', `
+                        #include <begin_vertex>
+                        vWetPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                    `);
+                    shader.fragmentShader = `
+                        uniform float uFront;
+                        varying vec3 vWetPos;
+                        ${WATER_GLSL_NOISE}
+                    ` + shader.fragmentShader.replace('#include <roughnessmap_fragment>', `
+                        #include <roughnessmap_fragment>
+                        // frente irregular: el agua avanza primero por los poros más abiertos
+                        float wetNoise = wNoise(vWetPos * vec3(0.28, 0.5, 0.28)) + 0.4 * wNoise(vWetPos * vec3(0.9, 1.4, 0.9));
+                        float wet = smoothstep(uFront - 1.0, uFront + 1.0, vWetPos.y + (wetNoise - 0.7) * 6.0);
+                        diffuseColor.rgb *= mix(1.0, 0.52, wet);
+                        roughnessFactor = mix(roughnessFactor, 0.38, wet);
+                    `);
+                };
+            });
+
+            // Parcelas de agua asomando por los poros junto a la pared de cada capa
+            const pointGeometry = (count) => {
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+                geometry.setAttribute('aSeed', new THREE.BufferAttribute(new Float32Array(count * 3).map(() => Math.random()), 3));
+                return geometry;
+            };
+            const tracers = new THREE.Points(pointGeometry(420), new THREE.ShaderMaterial({
+                vertexShader: TRACER_VERTEX,
+                fragmentShader: TRACER_FRAGMENT,
+                uniforms: shared,
+                transparent: true,
+                depthWrite: false
+            }));
+            tracers.frustumCulled = false;
+            tracers.renderOrder = 3;
+            scene.add(tracers);
+
+            const drops = (count, uniforms) => {
+                const material = new THREE.ShaderMaterial({
+                    vertexShader: DROP_VERTEX,
+                    fragmentShader: DROP_FRAGMENT,
+                    uniforms: {
+                        uTime: shared.uTime,
+                        uPointScale: shared.uPointScale,
+                        uCenterZ: { value: WATER.axisZ },
+                        uAmount: { value: 0 },
+                        ...Object.fromEntries(Object.entries(uniforms).map(([k, v]) => [k, { value: v }]))
+                    },
+                    transparent: true,
+                    depthWrite: false
+                });
+                const points = new THREE.Points(pointGeometry(count), material);
+                points.frustumCulled = false;
+                points.renderOrder = 3;
+                scene.add(points);
+                return material;
+            };
+            state.water.splash = drops(40, {
+                uRate: 2.4, uY: WATER.bedTop, uUp: 6, uDrop: 0, uSpread: 10, uSize: 1.1,
+                uColor: new THREE.Color(0.8, 0.68, 0.5)
+            });
+            state.water.spray = drops(60, {
+                uRate: 1.6, uY: WATER.bedBottom - 90, uUp: 0, uDrop: 240, uSpread: 5, uSize: 1.3,
+                uColor: new THREE.Color(0.88, 0.94, 1.0)
+            });
+
+            createFlowPanel();
+        }
+
+        // Riel de capas: el testigo del filtro, en el mismo orden físico que el modelo.
+        function createFlowPanel() {
+            state.water.rows = {};
+            state.water.order.forEach((id, i) => {
+                const cyl = state.cylinders[id];
+                const name = document.createElement('span');
+                name.className = 'layer-name';
+                name.textContent = layerTitle(id);
+                const time = document.createElement('span');
+                time.id = `layer-time-${i + 1}`;
+                const barTrack = document.createElement('span');
+                barTrack.className = 'layer-bar';
+                const bar = document.createElement('span');
+                barTrack.appendChild(bar);
+                const meta = document.createElement('span');
+                meta.className = 'layer-meta';
+                meta.append(time, barTrack);
+                const texture = document.createElement('span');
+                texture.className = 'swatch-tex';
+                texture.style.backgroundImage = `linear-gradient(rgba(36, 20, 15, 0.38), rgba(36, 20, 15, 0.38)), url(${CAPSULE_TEXTURES[id]})`;
+                const number = document.createElement('span');
+                number.className = 'swatch-num';
+                number.textContent = i + 1;
+                const swatch = document.createElement('span');
+                swatch.className = 'swatch';
+                swatch.append(texture, number);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'layer';
+                button.setAttribute('aria-pressed', 'false');
+                button.setAttribute('aria-label', `Capa ${i + 1}, ${layerTitle(id)}`);
+                button.setAttribute('aria-describedby', time.id);
+                button.append(name, meta, swatch);
+                button.addEventListener('click', () => selectLayer(id));
+                DOM.rail.appendChild(button);
+                state.water.rows[id] = { button, bar, time, top: cyl.position.y + cyl.scale.y / 2 };
+            });
+        }
+
+        // "Capa 2 · Arena de sílice" se presenta como título y posición, sin tocar el dato.
+        function layerTitle(id) {
+            return CAPSULE_DB[id].nombre.split('·')[1].trim();
+        }
+
+        function layerNumber(id) {
+            return CAPSULE_DB[id].nombre.split('·')[0].trim().split(' ')[1];
+        }
+
+        function updateHint() {
+            DOM.hint.hidden = DOM.hintTap.hidden && DOM.hintDrag.hidden;
+        }
+
+        // Altura visual del frente: cada segmento se recorre según su volumen de poros.
+        function frontY(model, table) {
+            const total = model.bedVolume;
+            for (let i = 0; i < SEGMENT_COUNT; i++) {
+                if (total <= table[i + 1]) {
+                    const span = Math.max(table[i + 1] - table[i], 1e-3);
+                    const { uSegY } = state.water.shared;
+                    return THREE.MathUtils.lerp(uSegY.value[i], uSegY.value[i + 1], (total - table[i]) / span);
+                }
+            }
+            return WATER.bedBottom;
+        }
+
+        function updateWater() {
+            const w = state.water;
+            const { model, shared } = w;
+
+            // tope de dt: al volver de una pestaña oculta el modelo no da un salto
+            const dt = Math.min(w.clock.getDelta(), 0.05);
+            w.elapsed += dt;
+            model.running = w.elapsed > 0.6;
+            model.step(dt);
+            if (!reducedMotion) shared.uTime.value = w.elapsed;
+
+            // perfil del lecho para los shaders
+            let pore = 0;
+            model.segments.forEach((seg, i) => {
+                pore += seg.poreVolume;
+                shared.uSegPore.value[i + 1] = pore;
+                shared.uSegZ.value[i] = seg.id ? state.cylinders[seg.id].position.z : 0;
+            });
+            model.turbidityProfile().forEach((c, i) => { shared.uSegC.value[i + 1] = c; });
+            shared.uFront.value = frontY(model, shared.uSegPore.value);
+            shared.uThroughput.value = ((model.bedVolume + model.volumeOut) / pore) % 1;
+
+            const pondY = WATER.bedTop + model.pondHeight;
+            w.pond.visible = model.pondHeight > 0.05;
+            w.pond.scale.y = Math.max(model.pondHeight, 0.01);
+
+            // chorro de entrada: su punta cae desde la boquilla
+            const uIn = w.inlet.material.userData.uniforms;
+            const tIn = Math.max(0, w.elapsed - 0.6);
+            uIn.uQ.value = model.inflow;
+            uIn.uMaskBottom.value = Math.max(pondY, WATER.nozzleY - WATER.nozzleSpeed * tIn - 0.5 * WATER.gravity * tIn * tIn);
+            w.inlet.visible = model.inflow > 0;
+
+            const uColumn = w.column.material.userData.uniforms;
+            uColumn.uQ.value = model.bedFlow;
+            uColumn.uMaskBottom.value = shared.uFront.value;
+            w.column.visible = model.bedFlow > 0;
+
+            // chorro de salida: mismo cálculo que el de entrada, con el caudal que sale
+            if (w.outflowStart === null && model.outflow > 0) w.outflowStart = w.elapsed;
+            const uOut = w.outlet.material.userData.uniforms;
+            uOut.uQ.value = model.outflow;
+            uOut.uSpeed.value = Math.max(model.outflow / model.bedArea, 1);
+            if (w.outflowStart !== null) {
+                const tOut = w.elapsed - w.outflowStart;
+                uOut.uMaskBottom.value = WATER.bedBottom - 0.5 * WATER.gravity * tOut * tOut;
+            }
+            w.outlet.visible = model.outflow > 0;
+
+            w.splash.uniforms.uY.value = pondY;
+            // con movimiento reducido no hay gotas sueltas; el caudal y los chorros siguen
+            w.splash.uniforms.uAmount.value = !reducedMotion && model.inflow > 0 ? Math.min(model.inflow / 8000, 1) * 0.7 : 0;
+            w.spray.uniforms.uAmount.value = !reducedMotion && model.outflow > 0 ? Math.min(model.outflow / 8000, 1) * 0.6 : 0;
+
+            // cada fila del riel se enciende cuando el agua alcanza su capa
+            w.order.forEach(id => {
+                const row = w.rows[id];
+                if (!row.wet && model.bedVolume > 0 && shared.uFront.value < row.top) {
+                    row.wet = true;
+                    row.button.classList.add('is-wet');
+                }
+            });
+
+            updateFlowPanel();
+        }
+
+        function updateFlowPanel() {
+            const w = state.water;
+            if (w.elapsed - (w.panelUpdated || 0) < 0.2) return;
+            w.panelUpdated = w.elapsed;
+
+            const { model } = w;
+            const mL = (v) => (v / 1000).toFixed(1);
+            DOM.qIn.textContent = `${mL(model.inflow)} mL/s`;
+            DOM.qOut.textContent = `${mL(model.outflow)} mL/s`;
+            DOM.vIn.textContent = `${mL(model.volumeIn)} mL`;
+            DOM.vHeld.textContent = `${mL(model.bedVolume + model.pondHeight * model.pondArea)} mL`;
+            DOM.vOut.textContent = `${mL(model.volumeOut)} mL`;
+
+            const times = w.order.map(id => model.residenceTime(id));
+            const longest = Math.max(...times.filter(Number.isFinite), 1e-3);
+            w.order.forEach((id, i) => {
+                const { bar, time } = w.rows[id];
+                const present = model.segments.find(s => s.id === id).present;
+                const known = present && Number.isFinite(times[i]);
+                const label = present ? (known ? `${times[i].toFixed(1)} s` : '—') : 'fuera';
+                bar.style.width = known ? `${times[i] / longest * 100}%` : '0';
+                time.textContent = label;
             });
         }
 
         function onTap(e) {
-            if (e.clientY < 50) return;
-
+            const rect = renderer.domElement.getBoundingClientRect();
             const mouse = new THREE.Vector2(
-                (e.clientX / window.innerWidth) * 2 - 1,
-                -(e.clientY / window.innerHeight) * 2 + 1
+                ((e.clientX - rect.left) / rect.width) * 2 - 1,
+                -((e.clientY - rect.top) / rect.height) * 2 + 1
             );
-            
+
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(mouse, camera);
             
@@ -248,51 +1064,171 @@
                 let root = hits[0].object;
                 while (root.parent && !state.objects[root.name]) root = root.parent;
                 
-                const id = root.name;
-                
-                if (state.selectedId === id) {
-                    state.targets[id] = 0;
-                    state.selectedId = null;
-                    DOM.card.style.display = 'none';
-                } else {
-                    if (state.selectedId) state.targets[state.selectedId] = 0;
-                    state.selectedId = id;
-                    state.targets[id] = 130.0;
-                    
-                    const data = CAPSULE_DB[id];
-                    DOM.nombre.innerText = data.nombre;
-                    DOM.mecanismo.innerText = data.mecanismo;
-                    DOM.funcion.innerText = data.funcion;
-                    DOM.proporcion.innerText = data.proporcion;
-                    DOM.card.style.display = 'block';
+                selectLayer(root.name);
+            }
+        }
+
+        // Una sola vía para tap 3D, riel, botón y Esc: tocar la capa extraída la devuelve.
+        function selectLayer(id) {
+            if (state.selectedId === id) {
+                // el foco no se pierde con el botón que va a ocultarse
+                if (DOM.detail.contains(document.activeElement)) state.water.rows[id].button.focus({ preventScroll: true });
+                state.targets[id] = 0;
+                state.water.model.setLayerPresent(id, true);
+                state.selectedId = null;
+                DOM.live.textContent = `${layerTitle(id)} de vuelta en el filtro.`;
+                DOM.detail.hidden = true;
+                document.body.classList.remove('has-detail');
+                state.water.rows[id].button.setAttribute('aria-pressed', 'false');
+            } else {
+                if (state.selectedId) {
+                    state.targets[state.selectedId] = 0;
+                    state.water.model.setLayerPresent(state.selectedId, true);
+                    state.water.rows[state.selectedId].button.setAttribute('aria-pressed', 'false');
                 }
+                state.selectedId = id;
+                state.targets[id] = 130.0;
+                state.water.model.setLayerPresent(id, false);
+                state.water.rows[id].button.setAttribute('aria-pressed', 'true');
+
+                const data = CAPSULE_DB[id];
+                DOM.orden.textContent = `Capa ${layerNumber(id)} de ${LAYER_COUNT}`;
+                DOM.nombre.textContent = layerTitle(id);
+                DOM.mecanismo.textContent = data.mecanismo;
+                DOM.funcion.textContent = data.funcion;
+                DOM.proporcion.textContent = data.proporcion;
+                DOM.residencia.textContent = 'Sacaste esta capa: el agua no pasa por ella.';
+                DOM.live.textContent = `${layerTitle(id)}, capa ${layerNumber(id)} de ${LAYER_COUNT}, fuera del filtro.`;
+                DOM.detail.hidden = false;
+                DOM.detail.scrollTop = 0;
+                document.body.classList.add('has-detail');
+                DOM.hintTap.hidden = true;
+                updateHint();
+            }
+            state.water.panelUpdated = -1;
+        }
+
+        function returnSelected() {
+            const id = state.selectedId;
+            if (!id) return;
+            selectLayer(id);
+            state.water.rows[id].button.focus({ preventScroll: true });
+        }
+
+        // Márgenes que ocupa la interfaz según el layout activo
+        function readLayout() {
+            const view = state.view;
+            if (lateralLayout.matches) {
+                view.targetB = 0;
+                view.targetL = DOM.sheet.offsetWidth;
+                view.targetR = wideLayout.matches
+                    ? DOM.stage.clientWidth - DOM.rail.getBoundingClientRect().left + 16
+                    : 104;
+            } else {
+                view.targetB = DOM.sheet.offsetHeight;
+                view.targetL = 0;
+                view.targetR = 104;
             }
         }
 
         function onResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            const W = DOM.stage.clientWidth;
+            const H = DOM.stage.clientHeight;
+            if (!W || !H) return;
+            camera.aspect = W / H;
+            renderer.setSize(W, H);
+            readLayout();
+
+            // distancia calculada con la hoja en reposo: no cambia al abrir una capa
+            const view = state.view;
+            const safeBottom = parseFloat(getComputedStyle(DOM.sheet).paddingBottom) - 12;
+            const restB = lateralLayout.matches ? 0 : 120 + safeBottom;
+            const t = Math.tan(THREE.MathUtils.degToRad(FRAME.fov / 2));
+            const k = (H - restB) / H;
+            // con tope: en ventanas muy estrechas la interfaz podría ocupar todo el ancho
+            const kw = Math.max((W - view.targetL - view.targetR) / W, 0.25);
+            const frame = lateralLayout.matches ? FRAME.lateral : FRAME.portrait;
+            const d = FRAME.margin * Math.max(frame.halfHeight / (t * k), FRAME.halfWidth / (t * camera.aspect * kw));
+            controls.minDistance = 0.6 * d;
+            controls.maxDistance = 1.3 * d;
+            const direction = camera.position.clone().sub(controls.target);
+            controls.target.y = frame.targetY;
+            camera.position.copy(controls.target).add(direction.setLength(d));
+
+            applyViewOffset();
+            updatePointScale();
+        }
+
+        function applyViewOffset() {
+            const W = DOM.stage.clientWidth;
+            const H = DOM.stage.clientHeight;
+            const { uiB, uiL, uiR } = state.view;
+            camera.setViewOffset(W, H, -(uiL - uiR) / 2, uiB / 2, W, H);
+        }
+
+        // gl_PointSize va en píxeles físicos: la escala mantiene el tamaño de las gotas
+        function updatePointScale() {
+            const fov = THREE.MathUtils.degToRad(camera.fov);
+            state.water.shared.uPointScale.value =
+                renderer.getPixelRatio() * (DOM.stage.clientHeight / (2 * Math.tan(fov / 2))) / 1272;
+        }
+
+        // Si el teléfono no llega a unos 40 fps, baja la resolución y no la vuelve a subir.
+        function adaptPixelRatio(dt) {
+            if (dt > 0.5) return;
+            frameStats.sum += dt;
+            frameStats.count += 1;
+            if (frameStats.count < 90) return;
+            const slow = frameStats.sum / frameStats.count > 0.024;
+            frameStats.sum = 0;
+            frameStats.count = 0;
+            if (!slow) return;
+            const ratio = renderer.getPixelRatio();
+            const next = ratio > 1.5 ? 1.5 : ratio > 1.25 ? 1.25 : ratio;
+            if (next !== ratio) {
+                renderer.setPixelRatio(next);
+                updatePointScale();
+            }
         }
 
         function tick() {
             requestAnimationFrame(tick);
-            
+
+            const dt = frameClock.getDelta();
+            adaptPixelRatio(dt);
+            // igual de rápido a 30 y a 120 Hz
+            const ease = reducedMotion ? 1 : 1 - Math.exp(-6 * dt);
+
             Object.keys(state.targets).forEach(id => {
                 if (state.objects[id] && id !== 'filtroMarte') {
-                    state.objects[id].position.z = THREE.MathUtils.lerp(state.objects[id].position.z, state.targets[id], 0.1);
+                    state.objects[id].position.z = THREE.MathUtils.lerp(state.objects[id].position.z, state.targets[id], ease);
                     // el cilindro de material acompaña a su cápsula
                     if (state.cylinders[id]) {
                         state.cylinders[id].position.z = state.cylBaseZ[id] + state.objects[id].position.z;
                     }
                 }
             });
-            
+
+            const view = state.view;
+            if (Math.abs(view.uiB - view.targetB) + Math.abs(view.uiL - view.targetL) + Math.abs(view.uiR - view.targetR) > 0.1) {
+                view.uiB = THREE.MathUtils.lerp(view.uiB, view.targetB, ease);
+                view.uiL = THREE.MathUtils.lerp(view.uiL, view.targetL, ease);
+                view.uiR = THREE.MathUtils.lerp(view.uiR, view.targetR, ease);
+                applyViewOffset();
+            }
+
+            updateWater();
+
             controls.update();
             renderer.render(scene, camera);
+            document.body.classList.add('ready');
         }
 
-        init();
+        try {
+            init();
+        } catch (error) {
+            window.mykoraFail(error);
+        }
     </script>
 </body>
 </html>
