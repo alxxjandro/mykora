@@ -3,154 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#1E2A2C">
-    <title>Mykora: filtro de agua</title>
+    <meta name="theme-color" content="#0A0C0D">
+    <title>Mykora</title>
     <link rel="icon" href="data:,">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Piazzolla:wght@400;600&display=swap">
     <style>
         :root {
-            --pizarra: #1E2A2C;
-            --micelio: #F2EEE6;
-            --ostra: #D8D5CF;
-            --tinta: #24140F;
-            --sec: #5A4A40;
-            --turbia: #6A4A16;
-            --agua: #17566A;
+            --bg: #0A0C0D;
+            --text: #F4F5F5;
+            --muted: #9BA3A8;
+            --line: rgba(255, 255, 255, 0.14);
+            --in: #C9A26B;
+            --out: #9AD7FF;
             --safe-t: env(safe-area-inset-top, 0px);
             --safe-r: env(safe-area-inset-right, 0px);
             --safe-b: env(safe-area-inset-bottom, 0px);
             --safe-l: env(safe-area-inset-left, 0px);
+            --dock-h: calc(312px + var(--safe-b));
         }
         html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
         body {
-            background: var(--pizarra); color: var(--micelio);
-            font: 400 14px/1.4 Piazzolla, Georgia, serif;
-            font-variant-numeric: tabular-nums lining-nums;
+            display: grid; grid-template-rows: minmax(0, 1fr) var(--dock-h); height: 100dvh;
+            background: var(--bg); color: var(--text);
+            font: 400 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-variant-numeric: tabular-nums;
             -webkit-text-size-adjust: 100%;
         }
-        h1, h2, p, dl, dd { margin: 0; }
-        button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        h1, h2, p { margin: 0; }
         [hidden] { display: none !important; }
-
-        #stage { position: fixed; inset: 0; height: 100dvh; }
-        canvas { display: block; opacity: 0; transition: opacity 0.4s; }
-        .ready canvas { opacity: 1; }
-
-        #top {
-            position: fixed; z-index: 1; pointer-events: none; max-width: 96px;
-            top: calc(16px + var(--safe-t)); left: calc(16px + var(--safe-l));
-            transition: opacity 0.2s;
-        }
-        #top h1 { font-size: 18px; font-weight: 600; line-height: 1.2; margin-bottom: 2px; }
-
-        #rail {
-            position: fixed; z-index: 1; display: flex; flex-direction: column; visibility: hidden;
-            top: calc(max(72px, 50dvh - 264px) + var(--safe-t)); right: calc(12px + var(--safe-r));
-        }
-        #rail::before {
-            content: "Tiempo del agua en cada capa"; position: absolute; bottom: 100%; right: 0; width: 92px;
-            margin-bottom: 6px; font-size: 12px; line-height: 1.2; text-align: right;
-        }
-        .ready #rail, .ready #sheet { visibility: visible; }
-        .layer { display: flex; align-items: stretch; justify-content: flex-end; gap: 6px; width: 92px; height: 48px; text-align: right; }
-        .layer:focus-visible { outline: 2px solid var(--micelio); outline-offset: 2px; }
-        .layer-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-        .layer-meta { flex: 0 0 42px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
-        .layer-bar { height: 3px; border-radius: 2px; overflow: hidden; }
-        .layer-bar > span { display: block; height: 100%; width: 0; margin-left: auto; background: var(--micelio); transition: width 0.2s linear; }
-        .swatch { position: relative; flex: 0 0 44px; display: grid; place-items: center; border-radius: 2px; overflow: hidden; font-weight: 600; }
-        .swatch-tex {
-            position: absolute; inset: 0; background-size: cover;
-            filter: saturate(0.2) brightness(0.6); transition: filter 0.4s;
-        }
-        .layer.is-wet .swatch-tex { filter: none; }
-        .swatch-num { position: relative; text-shadow: 0 0 3px rgba(36, 20, 15, 0.9); }
-        .layer[aria-pressed="true"] .swatch-tex { visibility: hidden; }
-        .layer[aria-pressed="true"] .swatch { box-shadow: inset 0 0 0 1px var(--micelio); }
-
-        #sheet {
-            position: fixed; z-index: 2; left: 0; right: 0; bottom: 0; box-sizing: border-box; visibility: hidden;
-            display: flex; flex-direction: column; gap: 8px; max-height: 46dvh; min-height: calc(120px + var(--safe-b));
-            padding: 12px calc(16px + var(--safe-r)) calc(12px + var(--safe-b)) calc(16px + var(--safe-l));
-            background: var(--ostra); color: var(--tinta); border-radius: 14px 14px 0 0;
-        }
-        #sheet :focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; }
-        #hint { color: var(--sec); }
-        #detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
-        #capa-orden { color: var(--sec); }
-        #capa-nombre { font-size: 18px; font-weight: 600; line-height: 1.25; margin-bottom: 8px; }
-        #detail dt { color: var(--sec); }
-        #detail dd { margin-bottom: 8px; }
-        #capa-residencia { margin-bottom: 8px; }
         .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-        #return-layer, #reload { min-height: 44px; padding: 0 16px; border-radius: 8px; font-weight: 600; }
-        #return-layer { background: var(--tinta); color: var(--ostra); margin-bottom: 8px; }
-        #sheet #return-layer:focus-visible { outline-offset: 3px; }
-        .note { font-size: 12px; color: var(--sec); }
-        #note-side { display: none; }
-        #flow { flex: none; display: flex; flex-direction: column; gap: 6px; }
-        .flow-q { display: flex; justify-content: space-between; gap: 24px; }
-        .flow-q > :last-child, .flow-item:last-child { text-align: right; }
-        .flow-lbl { display: block; font-size: 12px; color: var(--sec); }
-        .flow-value { display: block; font-size: 24px; font-weight: 600; line-height: 1.15; }
-        #q-in { color: var(--turbia); }
-        #q-out { color: var(--agua); }
-        .flow-balance { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
-        .flow-item { white-space: nowrap; }
-        .flow-op { color: var(--sec); }
-        .has-detail .flow-balance, .has-detail #hint { display: none; }
-        .has-detail #flow { border-top: 1px solid rgba(36, 20, 15, 0.18); padding-top: 8px; }
 
-        #status {
-            position: fixed; z-index: 3; inset: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; gap: 16px; padding: 24px; text-align: center;
+        /* visor: su tamaño no depende del panel, así que nada se mueve al tocar */
+        #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+        canvas { display: block; }
+        #brand {
+            position: absolute; z-index: 1; pointer-events: none; font-size: 15px; font-weight: 600;
+            top: calc(14px + var(--safe-t)); left: calc(16px + var(--safe-l));
         }
-        .ready #status { display: none; }
-        #reload { background: var(--ostra); color: var(--tinta); }
-        #reload:focus-visible { outline: 2px solid var(--micelio); outline-offset: 2px; }
-
-        /* vertical: al abrir una capa el encabezado cede su sitio */
-        @media not all and (min-width: 900px) {
-            .has-detail #top { opacity: 0; }
+        #progress {
+            position: absolute; z-index: 1; left: 0; bottom: 0; width: 100%; height: 2px; display: block;
+            appearance: none; border: 0; background: none; color: var(--text);
         }
-        @media (max-height: 700px) and (max-width: 899px) and (orientation: portrait) {
-            .layer { height: 44px; }
-            #sheet { max-height: min(46dvh, calc(100dvh - 344px - var(--safe-t))); }
+        #progress::-webkit-progress-bar { background: none; }
+        #progress::-webkit-progress-value { background: var(--text); }
+        #progress::-moz-progress-bar { background: var(--text); }
+        .ready #progress { display: none; }
+        #error {
+            position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 12px; text-align: center;
+        }
+        #reload {
+            appearance: none; font: inherit; color: var(--text); background: none; border: 1px solid var(--text);
+            border-radius: 0; min-height: 44px; padding: 0 16px; cursor: pointer;
         }
 
-        /* lateral: escritorio y teléfono apaisado */
-        @media (min-width: 900px), (orientation: landscape) and (max-height: 700px) {
-            #top { max-width: 300px; }
-            #rail { top: 50%; transform: translateY(-50%); }
-            #sheet {
-                right: auto; width: 340px; max-height: 70dvh; min-height: 0;
-                padding-right: 16px; border-radius: 0 14px 0 0;
-            }
-            .has-detail #top { opacity: 1; }
-            .note-detail { display: none; }
-            #note-side { display: block; }
+        /* panel: altura fija; solo cambia el contenido de su última zona */
+        #dock {
+            box-sizing: border-box; min-height: 0; display: flex; flex-direction: column; gap: 10px;
+            padding: 12px calc(16px + var(--safe-r)) calc(12px + var(--safe-b)) calc(16px + var(--safe-l));
+            border-top: 1px solid var(--line);
+        }
+        .label { display: block; font-size: 12px; color: var(--muted); }
+        .unit { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+        #flow { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .q { display: block; font-size: 24px; font-weight: 600; line-height: 1.2; }
+        #q-in { color: var(--in); }
+        #q-out { color: var(--out); }
+
+        #layers { flex: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+        .layer {
+            appearance: none; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0;
+            border-radius: 0; cursor: pointer; text-align: left; -webkit-tap-highlight-color: transparent;
+            display: flex; flex-direction: column; gap: 4px; min-width: 0;
+        }
+        .layer:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+        .swatch {
+            display: block; aspect-ratio: 1; background-size: cover; background-position: center;
+            filter: saturate(0.25) brightness(0.55); transition: filter 0.4s;
+        }
+        .layer.is-wet .swatch { filter: none; }
+        .layer[aria-pressed="true"] .swatch { outline: 2px solid var(--text); outline-offset: -2px; filter: none; }
+        .layer-name { font-size: 11px; line-height: 1.2; color: var(--muted); min-height: 2.4em; }
+        .layer[aria-pressed="true"] .layer-name { color: var(--text); }
+        .layer-time { font-size: 13px; font-weight: 600; }
+
+        #panel { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; border-top: 1px solid var(--line); padding-top: 10px; }
+        /* el total llena el panel en reposo: la nota queda abajo, sin hueco muerto */
+        #balance { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: auto 1fr; gap: 6px; min-height: 100%; }
+        .total { display: block; font-size: 20px; font-weight: 600; line-height: 1.25; }
+        #note { grid-column: 1 / -1; align-self: end; font-size: 12px; color: var(--muted); }
+
+        #detail { position: relative; }
+        #capa-nombre { font-size: 16px; font-weight: 600; line-height: 1.25; padding-right: 36px; }
+        #return-layer {
+            position: absolute; top: -10px; right: -2px; width: 44px; height: 44px; padding: 12px; display: block;
+            appearance: none; color: var(--text); background: none; border: 0; border-radius: 0; cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #return-layer:focus-visible, #reload:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+        #return-layer svg { display: block; width: 20px; height: 20px; }
+        #capa-funcion { margin-top: 4px; }
+        #capa-mecanismo { margin-top: 4px; font-size: 13px; color: var(--muted); }
+
+        @media (max-height: 700px) and (orientation: portrait) {
+            :root { --dock-h: calc(296px + var(--safe-b)); }
+            #dock { gap: 8px; padding-top: 10px; }
+            .q { font-size: 20px; }
+            #panel { padding-top: 8px; }
+        }
+
+        /* apaisado y escritorio: el panel pasa al lado derecho, igual de fijo */
+        @media (min-width: 900px), (orientation: landscape) and (max-height: 560px) {
+            body { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) 340px; }
+            #dock { border-top: 0; border-left: 1px solid var(--line); padding-left: 16px; }
+        }
+        @media (orientation: landscape) and (max-height: 560px) and (max-width: 899px) {
+            #dock { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+            .q { font-size: 20px; }
+            .layer-name { display: none; }
+            #panel { padding-top: 8px; }
         }
         @media (min-width: 900px) {
-            #top h1 { font-size: 32px; }
-            #rail { right: max(calc(12px + var(--safe-r)), calc(50vw - 430px)); }
-            .layer { width: 220px; }
-            .layer-name {
-                position: static; width: auto; height: auto; clip-path: none; flex: 1; min-width: 0;
-                align-self: center; line-height: 1.15; white-space: normal;
-            }
-        }
-        @media (orientation: landscape) and (max-height: 700px) and (max-width: 899px) {
-            .layer { height: 44px; }
-            #sheet { width: calc(300px + var(--safe-l)); max-height: calc(100dvh - 72px); }
-        }
-        @media (max-height: 320px) {
-            #rail { top: 0; transform: none; max-height: 100dvh; overflow-y: auto; }
-            #rail::before { display: none; }
+            body { grid-template-columns: minmax(0, 1fr) 400px; }
+            #dock { padding: 24px 24px 24px 24px; gap: 20px; }
+            .q { font-size: 28px; }
+            #layers { grid-template-columns: 1fr; gap: 0; }
+            .layer { flex-direction: row; align-items: center; gap: 12px; padding: 4px 0; }
+            .swatch { flex: 0 0 44px; width: 44px; }
+            .layer-name { flex: 1; min-height: 0; font-size: 14px; color: var(--text); }
+            .layer-time { font-weight: 400; }
+            .layer:hover .layer-name { text-decoration: underline; }
+            #capa-nombre { font-size: 18px; }
+            #panel { padding-top: 20px; }
         }
         @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after { transition: none !important; }
+            * { transition: none !important; }
         }
     </style>
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
@@ -164,55 +151,47 @@
     </script>
 </head>
 <body>
-    <div id="stage"></div>
-    <header id="top">
-        <h1>Mykora</h1>
-        <p>Filtro de agua por capas</p>
-    </header>
-    <nav id="rail" aria-label="Capas"></nav>
+    <main id="stage">
+        <h1 id="brand">Mykora</h1>
+        <progress id="progress" max="100" value="0" aria-label="Carga del modelo"></progress>
+        <div id="error" hidden>
+            <p>No se pudo cargar.</p>
+            <button id="reload" type="button">Reintentar</button>
+        </div>
+    </main>
     <p id="live" class="sr-only" aria-live="polite"></p>
-    <section id="sheet">
-        <p id="hint"><span id="hint-tap">Toca una capa para sacarla.</span> <span id="hint-drag">Arrastra para girar.</span></p>
-        <div id="detail" hidden>
-            <p id="capa-orden"></p>
-            <h2 id="capa-nombre"></h2>
-            <p id="capa-residencia"></p>
-            <button id="return-layer" type="button">Devolver al filtro</button>
-            <dl>
-                <dt>Cómo actúa</dt><dd id="capa-mecanismo"></dd>
-                <dt>Para qué sirve</dt><dd id="capa-funcion"></dd>
-                <dt>Cuánto ocupa</dt><dd id="capa-proporcion"></dd>
-            </dl>
-            <p class="note note-detail">Simulación con las ecuaciones de Darcy y Kozeny–Carman. La porosidad, el grano y la escala son estimados.</p>
-        </div>
+    <section id="dock" aria-label="Caudal y capas">
         <div id="flow">
-            <div class="flow-q">
-                <div><span class="flow-lbl">Entra</span><span id="q-in" class="flow-value"></span></div>
-                <div><span class="flow-lbl">Sale</span><span id="q-out" class="flow-value"></span></div>
+            <div><span class="label">Entra</span><span class="q"><span id="q-in">—</span> <span class="unit">mL/s</span></span></div>
+            <div><span class="label">Sale</span><span class="q"><span id="q-out">—</span> <span class="unit">mL/s</span></span></div>
+        </div>
+        <div id="layers"></div>
+        <div id="panel">
+            <div id="balance">
+                <div><span class="total"><span id="v-in">—</span> <span class="unit">mL</span></span><span class="label">Entró</span></div>
+                <div><span class="total"><span id="v-held">—</span> <span class="unit">mL</span></span><span class="label">En el filtro</span></div>
+                <div><span class="total"><span id="v-out">—</span> <span class="unit">mL</span></span><span class="label">Salió</span></div>
+                <p id="note">Simulación con valores estimados.</p>
             </div>
-            <div class="flow-balance" role="group" aria-label="Balance de masa">
-                <div class="flow-item"><span id="v-in"></span><span class="flow-lbl">entró</span></div>
-                <div class="flow-op">=</div>
-                <div class="flow-item"><span id="v-held"></span><span class="flow-lbl">en el filtro</span></div>
-                <div class="flow-op">+</div>
-                <div class="flow-item"><span id="v-out"></span><span class="flow-lbl">salió</span></div>
+            <div id="detail" hidden>
+                <h2 id="capa-nombre"></h2>
+                <button id="return-layer" type="button" aria-label="Devolver la capa al filtro">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+                <p id="capa-funcion"></p>
+                <p id="capa-mecanismo"><span id="capa-proporcion"></span>. <span id="capa-tipo"></span></p>
             </div>
         </div>
-        <p id="note-side" class="note">Simulación con las ecuaciones de Darcy y Kozeny–Carman. La porosidad, el grano y la escala son estimados.</p>
     </section>
-    <div id="status">
-        <p id="status-text">Cargando el filtro…</p>
-        <button id="reload" type="button" hidden>Recargar</button>
-    </div>
 
     <!-- Script clásico: si el CDN falla, el módulo nunca corre y nadie más avisaría. -->
     <script>
         window.mykoraFail = function (error) {
             if (error) console.error(error);
             window.mykoraFailed = true;
-            document.getElementById('status-text').setAttribute('role', 'alert');
-            document.getElementById('status-text').textContent = 'No se pudo cargar el filtro. Revisa tu conexión.';
-            document.getElementById('reload').hidden = false;
+            document.getElementById('progress').hidden = true;
+            document.getElementById('error').hidden = false;
+            document.getElementById('error').setAttribute('role', 'alert');
         };
         document.getElementById('reload').addEventListener('click', function () { location.reload(); });
         setTimeout(function () { if (!window.mykoraStarted) window.mykoraFail(); }, 15000);
@@ -229,8 +208,6 @@
 
         window.mykoraStarted = true;
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const lateralLayout = window.matchMedia('(min-width: 900px), (orientation: landscape) and (max-height: 700px)');
-        const wideLayout = window.matchMedia('(min-width: 900px)');
 
         // Carcasa translúcida en tono perla/gris (antes era azul).
         const SHELL_COLOR = "#dcd7cc";
@@ -407,21 +384,16 @@
 
         const DOM = {
             stage: document.getElementById('stage'),
-            rail: document.getElementById('rail'),
-            sheet: document.getElementById('sheet'),
-            hint: document.getElementById('hint'),
-            hintTap: document.getElementById('hint-tap'),
-            hintDrag: document.getElementById('hint-drag'),
+            progress: document.getElementById('progress'),
+            layers: document.getElementById('layers'),
+            balance: document.getElementById('balance'),
             detail: document.getElementById('detail'),
             live: document.getElementById('live'),
-            orden: document.getElementById('capa-orden'),
             nombre: document.getElementById('capa-nombre'),
-            mecanismo: document.getElementById('capa-mecanismo'),
+            mecanismo: document.getElementById('capa-tipo'),
             funcion: document.getElementById('capa-funcion'),
             proporcion: document.getElementById('capa-proporcion'),
-            residencia: document.getElementById('capa-residencia'),
             returnLayer: document.getElementById('return-layer'),
-            statusText: document.getElementById('status-text'),
             qIn: document.getElementById('q-in'),
             qOut: document.getElementById('q-out'),
             vIn: document.getElementById('v-in'),
@@ -429,25 +401,33 @@
             vOut: document.getElementById('v-out')
         };
 
+        // Nombres cortos para la fila de capas; el nombre completo sale de CAPSULE_DB.
+        const LAYER_SHORT = {
+            'Capsula_6': 'Grava gruesa',
+            'Capsula_2': 'Arena',
+            'Capsula_5': 'Zeolita',
+            'Capsula_4': 'Hierro',
+            'Capsula_1': 'Biochar',
+            'Capsula_3': 'Grava fina'
+        };
+
         const state = {
             selectedId: null,
             objects: {},
             targets: {},
-            // márgenes de interfaz: el encuadre centra el filtro en el espacio que dejan libre
-            view: { uiB: 0, uiL: 0, uiR: 0, targetB: 0, targetL: 0, targetR: 0 }
+            rows: {}
         };
 
-        // Encuadre: de la boquilla al chorro de salida, y el ancho del filtro con holgura
+        // Encuadre fijo: el filtro y un tramo igual de chorro arriba y abajo
         const FRAME = {
-            fov: 28, elevation: 8, halfWidth: 33, margin: 1.06,
-            portrait: { halfHeight: 152.5, targetY: 12.5 },
-            // en lateral sobra ancho y falta alto: se acerca sin perder la boquilla
-            lateral: { halfHeight: 120, targetY: 32 }
+            fov: 28, elevation: 8, halfWidth: 46, margin: 1.04,
+            // en vertical el filtro aprovecha el alto; un poco más de aire abajo para la cápsula extraída
+            portrait: { halfHeight: 98, targetY: -8 },
+            wide: { halfHeight: 112, targetY: 0 }
         };
 
         let scene, camera, renderer, controls;
-        const SCENE_COLOR = 0x1E2A2C;
-        const LAYER_COUNT = Object.keys(CAPSULE_DB).length;
+        const SCENE_COLOR = 0x0A0C0D;
         const frameClock = new THREE.Clock();
         const frameStats = { sum: 0, count: 0 };
         const manager = new THREE.LoadingManager();
@@ -462,9 +442,33 @@
             if (window.mykoraFailed) return;
             clearTimeout(loadWatchdog);
             loadWatchdog = setTimeout(window.mykoraFail, LOAD_STALL_MS);
-            DOM.statusText.textContent = `Cargando el filtro… ${Math.min(100, Math.round(loaded / EXPECTED_FILES * 100))}%`;
+            DOM.progress.value = Math.min(100, Math.round(loaded / EXPECTED_FILES * 100));
         };
         manager.onError = window.mykoraFail;
+
+        // Las capas se dibujan desde el primer momento para que el panel no salte al cargar.
+        Object.keys(CAPSULE_TEXTURES).forEach((id) => {
+            const swatch = document.createElement('span');
+            swatch.className = 'swatch';
+            swatch.style.backgroundImage = `url(${CAPSULE_TEXTURES[id]})`;
+            const name = document.createElement('span');
+            name.className = 'layer-name';
+            name.textContent = LAYER_SHORT[id];
+            const time = document.createElement('span');
+            time.className = 'layer-time';
+            time.id = `time-${id}`;
+            time.textContent = '—';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'layer';
+            button.setAttribute('aria-pressed', 'false');
+            button.setAttribute('aria-label', layerTitle(id));
+            button.setAttribute('aria-describedby', time.id);
+            button.append(swatch, name, time);
+            button.addEventListener('click', () => selectLayer(id));
+            DOM.layers.appendChild(button);
+            state.rows[id] = { button, time };
+        });
 
         function init() {
             scene = new THREE.Scene();
@@ -482,7 +486,7 @@
             controls.enableDamping = !reducedMotion;
             controls.dampingFactor = 0.05;
             controls.maxPolarAngle = Math.PI / 1.8;
-            controls.target.set(0, FRAME.portrait.targetY, WATER.axisZ);
+            controls.target.set(0, FRAME.wide.targetY, WATER.axisZ);
             const elevation = THREE.MathUtils.degToRad(FRAME.elevation);
             camera.position.set(0, Math.sin(elevation), Math.cos(elevation)).add(controls.target);
 
@@ -590,12 +594,7 @@
                     if (!pointerDown) return;
                     const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
                     pointerDown = null;
-                    if (moved <= TAP_MOVE_THRESHOLD) {
-                        onTap(e);
-                    } else {
-                        DOM.hintDrag.hidden = true;
-                        updateHint();
-                    }
+                    if (moved <= TAP_MOVE_THRESHOLD) onTap(e);
                 });
                 // si el gesto se cancela (p. ej. multitouch), no lo tratamos como tap
                 renderer.domElement.addEventListener('pointercancel', () => { pointerDown = null; });
@@ -606,11 +605,7 @@
                 });
 
                 new ResizeObserver(onResize).observe(DOM.stage);
-                new ResizeObserver(readLayout).observe(DOM.sheet);
                 onResize();
-                state.view.uiB = state.view.targetB;
-                state.view.uiL = state.view.targetL;
-                state.view.uiR = state.view.targetR;
 
                 // sin arrancar hasta tener texturas: así nunca se ven capas negras
                 return Promise.all(textures).then(tick);
@@ -892,59 +887,15 @@
                 uColor: new THREE.Color(0.88, 0.94, 1.0)
             });
 
-            createFlowPanel();
-        }
-
-        // Riel de capas: el testigo del filtro, en el mismo orden físico que el modelo.
-        function createFlowPanel() {
-            state.water.rows = {};
-            state.water.order.forEach((id, i) => {
+            order.forEach((id) => {
                 const cyl = state.cylinders[id];
-                const name = document.createElement('span');
-                name.className = 'layer-name';
-                name.textContent = layerTitle(id);
-                const time = document.createElement('span');
-                time.id = `layer-time-${i + 1}`;
-                const barTrack = document.createElement('span');
-                barTrack.className = 'layer-bar';
-                const bar = document.createElement('span');
-                barTrack.appendChild(bar);
-                const meta = document.createElement('span');
-                meta.className = 'layer-meta';
-                meta.append(time, barTrack);
-                const texture = document.createElement('span');
-                texture.className = 'swatch-tex';
-                texture.style.backgroundImage = `linear-gradient(rgba(36, 20, 15, 0.38), rgba(36, 20, 15, 0.38)), url(${CAPSULE_TEXTURES[id]})`;
-                const number = document.createElement('span');
-                number.className = 'swatch-num';
-                number.textContent = i + 1;
-                const swatch = document.createElement('span');
-                swatch.className = 'swatch';
-                swatch.append(texture, number);
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'layer';
-                button.setAttribute('aria-pressed', 'false');
-                button.setAttribute('aria-label', `Capa ${i + 1}, ${layerTitle(id)}`);
-                button.setAttribute('aria-describedby', time.id);
-                button.append(name, meta, swatch);
-                button.addEventListener('click', () => selectLayer(id));
-                DOM.rail.appendChild(button);
-                state.water.rows[id] = { button, bar, time, top: cyl.position.y + cyl.scale.y / 2 };
+                state.rows[id].top = cyl.position.y + cyl.scale.y / 2;
             });
         }
 
-        // "Capa 2 · Arena de sílice" se presenta como título y posición, sin tocar el dato.
+        // "Capa 2 · Arena de sílice": la fila ya muestra el orden; el título es el material.
         function layerTitle(id) {
             return CAPSULE_DB[id].nombre.split('·')[1].trim();
-        }
-
-        function layerNumber(id) {
-            return CAPSULE_DB[id].nombre.split('·')[0].trim().split(' ')[1];
-        }
-
-        function updateHint() {
-            DOM.hint.hidden = DOM.hintTap.hidden && DOM.hintDrag.hidden;
         }
 
         // Altura visual del frente: cada segmento se recorre según su volumen de poros.
@@ -1014,9 +965,9 @@
             w.splash.uniforms.uAmount.value = !reducedMotion && model.inflow > 0 ? Math.min(model.inflow / 8000, 1) * 0.7 : 0;
             w.spray.uniforms.uAmount.value = !reducedMotion && model.outflow > 0 ? Math.min(model.outflow / 8000, 1) * 0.6 : 0;
 
-            // cada fila del riel se enciende cuando el agua alcanza su capa
+            // cada capa se enciende cuando el agua la alcanza
             w.order.forEach(id => {
-                const row = w.rows[id];
+                const row = state.rows[id];
                 if (!row.wet && model.bedVolume > 0 && shared.uFront.value < row.top) {
                     row.wet = true;
                     row.button.classList.add('is-wet');
@@ -1033,21 +984,16 @@
 
             const { model } = w;
             const mL = (v) => (v / 1000).toFixed(1);
-            DOM.qIn.textContent = `${mL(model.inflow)} mL/s`;
-            DOM.qOut.textContent = `${mL(model.outflow)} mL/s`;
-            DOM.vIn.textContent = `${mL(model.volumeIn)} mL`;
-            DOM.vHeld.textContent = `${mL(model.bedVolume + model.pondHeight * model.pondArea)} mL`;
-            DOM.vOut.textContent = `${mL(model.volumeOut)} mL`;
+            DOM.qIn.textContent = mL(model.inflow);
+            DOM.qOut.textContent = mL(model.outflow);
+            DOM.vIn.textContent = mL(model.volumeIn);
+            DOM.vHeld.textContent = mL(model.bedVolume + model.pondHeight * model.pondArea);
+            DOM.vOut.textContent = mL(model.volumeOut);
 
-            const times = w.order.map(id => model.residenceTime(id));
-            const longest = Math.max(...times.filter(Number.isFinite), 1e-3);
-            w.order.forEach((id, i) => {
-                const { bar, time } = w.rows[id];
+            w.order.forEach((id) => {
                 const present = model.segments.find(s => s.id === id).present;
-                const known = present && Number.isFinite(times[i]);
-                const label = present ? (known ? `${times[i].toFixed(1)} s` : '—') : 'fuera';
-                bar.style.width = known ? `${times[i] / longest * 100}%` : '0';
-                time.textContent = label;
+                const t = model.residenceTime(id);
+                state.rows[id].time.textContent = present ? (Number.isFinite(t) ? `${t.toFixed(1)} s` : '—') : 'Fuera';
             });
         }
 
@@ -1073,42 +1019,40 @@
             }
         }
 
-        // Una sola vía para tap 3D, riel, botón y Esc: tocar la capa extraída la devuelve.
+        // Una sola vía para tap 3D, fila de capas, botón y Esc: tocar la capa extraída la devuelve.
         function selectLayer(id) {
+            if (!state.water) return;
+            const { rows } = state;
             if (state.selectedId === id) {
                 // el foco no se pierde con el botón que va a ocultarse
-                if (DOM.detail.contains(document.activeElement)) state.water.rows[id].button.focus({ preventScroll: true });
+                if (DOM.detail.contains(document.activeElement)) rows[id].button.focus({ preventScroll: true });
                 state.targets[id] = 0;
                 state.water.model.setLayerPresent(id, true);
                 state.selectedId = null;
                 DOM.live.textContent = `${layerTitle(id)} de vuelta en el filtro.`;
                 DOM.detail.hidden = true;
-                document.body.classList.remove('has-detail');
-                state.water.rows[id].button.setAttribute('aria-pressed', 'false');
+                DOM.balance.hidden = false;
+                rows[id].button.setAttribute('aria-pressed', 'false');
             } else {
                 if (state.selectedId) {
                     state.targets[state.selectedId] = 0;
                     state.water.model.setLayerPresent(state.selectedId, true);
-                    state.water.rows[state.selectedId].button.setAttribute('aria-pressed', 'false');
+                    rows[state.selectedId].button.setAttribute('aria-pressed', 'false');
                 }
                 state.selectedId = id;
                 state.targets[id] = 130.0;
                 state.water.model.setLayerPresent(id, false);
-                state.water.rows[id].button.setAttribute('aria-pressed', 'true');
+                rows[id].button.setAttribute('aria-pressed', 'true');
 
                 const data = CAPSULE_DB[id];
-                DOM.orden.textContent = `Capa ${layerNumber(id)} de ${LAYER_COUNT}`;
                 DOM.nombre.textContent = layerTitle(id);
-                DOM.mecanismo.textContent = data.mecanismo;
-                DOM.funcion.textContent = data.funcion;
                 DOM.proporcion.textContent = data.proporcion;
-                DOM.residencia.textContent = 'Sacaste esta capa: el agua no pasa por ella.';
-                DOM.live.textContent = `${layerTitle(id)}, capa ${layerNumber(id)} de ${LAYER_COUNT}, fuera del filtro.`;
+                DOM.funcion.textContent = data.funcion;
+                DOM.mecanismo.textContent = data.mecanismo;
+                DOM.live.textContent = `${layerTitle(id)} fuera del filtro.`;
+                DOM.balance.hidden = true;
                 DOM.detail.hidden = false;
-                DOM.detail.scrollTop = 0;
-                document.body.classList.add('has-detail');
-                DOM.hintTap.hidden = true;
-                updateHint();
+                DOM.detail.parentElement.scrollTop = 0;
             }
             state.water.panelUpdated = -1;
         }
@@ -1117,23 +1061,7 @@
             const id = state.selectedId;
             if (!id) return;
             selectLayer(id);
-            state.water.rows[id].button.focus({ preventScroll: true });
-        }
-
-        // Márgenes que ocupa la interfaz según el layout activo
-        function readLayout() {
-            const view = state.view;
-            if (lateralLayout.matches) {
-                view.targetB = 0;
-                view.targetL = DOM.sheet.offsetWidth;
-                view.targetR = wideLayout.matches
-                    ? DOM.stage.clientWidth - DOM.rail.getBoundingClientRect().left + 16
-                    : 104;
-            } else {
-                view.targetB = DOM.sheet.offsetHeight;
-                view.targetL = 0;
-                view.targetR = 104;
-            }
+            state.rows[id].button.focus({ preventScroll: true });
         }
 
         function onResize() {
@@ -1141,34 +1069,19 @@
             const H = DOM.stage.clientHeight;
             if (!W || !H) return;
             camera.aspect = W / H;
+            camera.updateProjectionMatrix();
             renderer.setSize(W, H);
-            readLayout();
 
-            // distancia calculada con la hoja en reposo: no cambia al abrir una capa
-            const view = state.view;
-            const safeBottom = parseFloat(getComputedStyle(DOM.sheet).paddingBottom) - 12;
-            const restB = lateralLayout.matches ? 0 : 120 + safeBottom;
             const t = Math.tan(THREE.MathUtils.degToRad(FRAME.fov / 2));
-            const k = (H - restB) / H;
-            // con tope: en ventanas muy estrechas la interfaz podría ocupar todo el ancho
-            const kw = Math.max((W - view.targetL - view.targetR) / W, 0.25);
-            const frame = lateralLayout.matches ? FRAME.lateral : FRAME.portrait;
-            const d = FRAME.margin * Math.max(frame.halfHeight / (t * k), FRAME.halfWidth / (t * camera.aspect * kw));
+            const frame = camera.aspect < 1 ? FRAME.portrait : FRAME.wide;
+            const d = FRAME.margin * Math.max(frame.halfHeight / t, FRAME.halfWidth / (t * camera.aspect));
             controls.minDistance = 0.6 * d;
             controls.maxDistance = 1.3 * d;
             const direction = camera.position.clone().sub(controls.target);
             controls.target.y = frame.targetY;
             camera.position.copy(controls.target).add(direction.setLength(d));
 
-            applyViewOffset();
             updatePointScale();
-        }
-
-        function applyViewOffset() {
-            const W = DOM.stage.clientWidth;
-            const H = DOM.stage.clientHeight;
-            const { uiB, uiL, uiR } = state.view;
-            camera.setViewOffset(W, H, -(uiL - uiR) / 2, uiB / 2, W, H);
         }
 
         // gl_PointSize va en píxeles físicos: la escala mantiene el tamaño de las gotas
@@ -1213,14 +1126,6 @@
                     }
                 }
             });
-
-            const view = state.view;
-            if (Math.abs(view.uiB - view.targetB) + Math.abs(view.uiL - view.targetL) + Math.abs(view.uiR - view.targetR) > 0.1) {
-                view.uiB = THREE.MathUtils.lerp(view.uiB, view.targetB, ease);
-                view.uiL = THREE.MathUtils.lerp(view.uiL, view.targetL, ease);
-                view.uiR = THREE.MathUtils.lerp(view.uiR, view.targetR, ease);
-                applyViewOffset();
-            }
 
             updateWater();
 
