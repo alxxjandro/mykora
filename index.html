@@ -426,6 +426,10 @@
             wide: { halfHeight: 112, targetY: 0 }
         };
 
+        // Distancia de salida de una cápsula: libra la carcasa (44) sin tapar las capas vecinas.
+        // frontEdge es lo que sobresale su frente del eje del filtro antes de salir.
+        const POP_OUT = { min: 46, max: 65, frontEdge: 24 };
+
         let scene, camera, renderer, controls;
         const SCENE_COLOR = 0x0A0C0D;
         const frameClock = new THREE.Clock();
@@ -1040,7 +1044,7 @@
                     rows[state.selectedId].button.setAttribute('aria-pressed', 'false');
                 }
                 state.selectedId = id;
-                state.targets[id] = 130.0;
+                state.targets[id] = state.popOut;
                 state.water.model.setLayerPresent(id, false);
                 rows[id].button.setAttribute('aria-pressed', 'true');
 
@@ -1080,6 +1084,11 @@
             const direction = camera.position.clone().sub(controls.target);
             controls.target.y = frame.targetY;
             camera.position.copy(controls.target).add(direction.setLength(d));
+
+            // Vista de lado: la cápsula debe seguir dentro del ancho visible del visor.
+            const visibleHalfWidth = d * t * camera.aspect;
+            state.popOut = THREE.MathUtils.clamp(visibleHalfWidth - POP_OUT.frontEdge, POP_OUT.min, POP_OUT.max);
+            if (state.selectedId) state.targets[state.selectedId] = state.popOut;
 
             updatePointScale();
         }
