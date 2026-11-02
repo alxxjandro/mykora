@@ -455,8 +455,13 @@
 
         // archivos previstos: .mtl y .obj por pieza más las seis texturas
         const EXPECTED_FILES = ASSETS.length * 2 + Object.keys(CAPSULE_TEXTURES).length;
+        // Una red atascada no da error: sin progreso, se avisa en vez de cargar para siempre.
+        const LOAD_STALL_MS = 30000;
+        let loadWatchdog = setTimeout(window.mykoraFail, LOAD_STALL_MS);
         manager.onProgress = (url, loaded) => {
             if (window.mykoraFailed) return;
+            clearTimeout(loadWatchdog);
+            loadWatchdog = setTimeout(window.mykoraFail, LOAD_STALL_MS);
             DOM.statusText.textContent = `Cargando el filtro… ${Math.min(100, Math.round(loaded / EXPECTED_FILES * 100))}%`;
         };
         manager.onError = window.mykoraFail;
@@ -1221,7 +1226,10 @@
 
             controls.update();
             renderer.render(scene, camera);
-            document.body.classList.add('ready');
+            if (!document.body.classList.contains('ready')) {
+                clearTimeout(loadWatchdog);
+                document.body.classList.add('ready');
+            }
         }
 
         try {
